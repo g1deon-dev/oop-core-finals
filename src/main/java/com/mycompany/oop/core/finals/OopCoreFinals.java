@@ -10,17 +10,33 @@ package com.mycompany.oop.core.finals;
  */
 
 import com.mycompany.oop.core.finals.util.DatabaseConnection;
+import com.mycompany.oop.core.finals.dao.ProductDAO;
+import com.mycompany.oop.core.finals.model.Product;
+import java.sql.SQLException;
+
 
 public class OopCoreFinals {
 
     public static void main(String[] args) {
-        try (var conn = DatabaseConnection.getConnection()) {
+            try{
+                ProductDAO dao = new ProductDAO();
 
-        System.out.println("MySQL Connection Successful!");
+                Product product = new Product(0, "Org Shirt", 25000, 20, 5);
 
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+                if(dao.getAllProducts().isEmpty()) {
+                    dao.addProduct(product);
+                    System.out.println("Product added successfully!");
+                }
+
+                for(Product p : dao.getAllProducts()) {
+                    System.out.println(p.getProductId() + " | " + p.getProductName() +" | "+ p.getQuantity() );
+                }
+            
+            } catch (SQLException error) {
+                System.out.println("Database error: " + error.getMessage());
+                error.printStackTrace();
+            }
+        
     }
     
     

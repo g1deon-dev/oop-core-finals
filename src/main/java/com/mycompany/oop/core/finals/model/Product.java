@@ -11,14 +11,14 @@ package com.mycompany.oop.core.finals.model;
 public class Product {
     private int productId;
     private String productName;
-    private int price;
+    private int priceCentavos;
     private int quantity;
     private int lowStockThreshold;
     
-    public Product(int productId, String productName, int price, int quantity, int lowStockThreshold) {
+    public Product(int productId, String productName, int priceCentavos, int quantity, int lowStockThreshold) {
         this.productId = productId;
         this.productName = productName;
-        this.price = price;
+        this.priceCentavos = priceCentavos;
         this.quantity = quantity;
         this.lowStockThreshold = lowStockThreshold;   
     }
@@ -31,8 +31,8 @@ public class Product {
         return productName;
     }
     
-    public int getPrice() {
-        return price;
+    public int getPriceCentavos() {
+        return priceCentavos;
     }
     
     public int getQuantity() {

@@ -14,13 +14,15 @@ public class Product {
     private int priceCentavos;
     private int quantity;
     private int lowStockThreshold;
+    private boolean active;
     
-    public Product(int productId, String productName, int priceCentavos, int quantity, int lowStockThreshold) {
+    public Product(int productId, String productName, int priceCentavos, int quantity, int lowStockThreshold, boolean active) {
         this.productId = productId;
         this.productName = productName;
         this.priceCentavos = priceCentavos;
         this.quantity = quantity;
         this.lowStockThreshold = lowStockThreshold;   
+        this.active = active;
     }
     
     public int getProductId() {
@@ -41,6 +43,10 @@ public class Product {
     
     public int getLowStockThreshold() {
         return lowStockThreshold;
+    }
+
+    public boolean isActive() {
+        return active;
     }
     
 }  

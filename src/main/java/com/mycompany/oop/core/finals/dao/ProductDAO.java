@@ -9,6 +9,9 @@ package com.mycompany.oop.core.finals.dao;
  * @author g1deon-dev
  */
 
+import com.mycompany.oop.core.finals.model.ProductSortField;
+import com.mycompany.oop.core.finals.model.SortDirection;
+import com.mycompany.oop.core.finals.model.StockStatus;
 import com.mycompany.oop.core.finals.model.Product;
 import com.mycompany.oop.core.finals.util.DatabaseConnection;
 import java.sql.*;
@@ -245,7 +248,193 @@ public class ProductDAO {
         }
 
         return false;
-    }   
+    }
+    
+    public List<Product> getSortedProducts(
+            ProductSortField sortField,
+            SortDirection sortDirection) throws SQLException {
 
+        if (sortField == null || sortDirection == null) {
+            throw new IllegalArgumentException(
+                "Sort field and direction cannot be null."
+            );
+        }
+
+        String column;
+
+        switch (sortField) {
+            case ID -> column = "product_id";
+            case NAME -> column = "product_name";
+            case QUANTITY -> column = "quantity";
+            case PRICE -> column = "price_centavos";
+            default -> throw new IllegalArgumentException(
+                "Invalid sorting field."
+            );
+        }
+
+        String direction = switch (sortDirection) {
+            case ASCENDING -> "ASC";
+            case DESCENDING -> "DESC";
+        };
+
+        String sql = """
+            SELECT * FROM products
+            WHERE is_active = TRUE
+            ORDER BY %s %s, product_id ASC
+            """.formatted(column, direction);
+
+        List<Product> products = new ArrayList<>();
+
+        try (Connection conn = DatabaseConnection.getConnection();
+            PreparedStatement stmt = conn.prepareStatement(sql);
+            ResultSet rs = stmt.executeQuery()) {
+
+            while (rs.next()) {
+                Product product = new Product(
+                    rs.getInt("product_id"),
+                    rs.getString("product_name"),
+                    rs.getInt("price_centavos"),
+                    rs.getInt("quantity"),
+                    rs.getInt("low_stock_threshold"),
+                    rs.getBoolean("is_active")
+                );
+
+                products.add(product);
+            }
+        }
+
+        return products;
+    }
+
+    
+    public List<Product> getProductsByStockStatusSorted(
+            StockStatus status,
+            ProductSortField sortField,
+            SortDirection sortDirection) throws SQLException {
+
+        if (status == null || sortField == null || sortDirection == null) {
+            throw new IllegalArgumentException(
+                "Stock status, sort field, and direction cannot be null."
+            );
+        }
+
+        String stockCondition = switch (status) {
+            case IN_STOCK -> "quantity > low_stock_threshold";
+            case LOW_STOCK ->
+                "quantity > 0 AND quantity <= low_stock_threshold";
+            case OUT_OF_STOCK -> "quantity = 0";
+        };
+
+        String column = switch (sortField) {
+            case ID -> "product_id";
+            case NAME -> "product_name";
+            case QUANTITY -> "quantity";
+            case PRICE -> "price_centavos";
+        };
+
+        String direction = switch (sortDirection) {
+            case ASCENDING -> "ASC";
+            case DESCENDING -> "DESC";
+        };
+
+        String sql = """
+            SELECT * FROM products
+            WHERE is_active = TRUE AND %s
+            ORDER BY %s %s, product_id ASC
+            """.formatted(stockCondition, column, direction);
+
+        List<Product> products = new ArrayList<>();
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+
+            while (rs.next()) {
+                Product product = new Product(
+                    rs.getInt("product_id"),
+                    rs.getString("product_name"),
+                    rs.getInt("price_centavos"),
+                    rs.getInt("quantity"),
+                    rs.getInt("low_stock_threshold"),
+                    rs.getBoolean("is_active")
+                );
+
+                products.add(product);
+            }
+        }
+
+        return products;
+    }
+
+    public List<Product> searchFilterAndSortProducts(
+            String keyword,
+            StockStatus status,
+            ProductSortField sortField,
+            SortDirection sortDirection) throws SQLException {
+
+        if (keyword == null || keyword.isBlank()) {
+            throw new IllegalArgumentException(
+                "Search keyword cannot be empty."
+            );
+        }
+
+        if (status == null || sortField == null || sortDirection == null) {
+            throw new IllegalArgumentException(
+                "Stock status, sort field, and direction are required."
+            );
+        }
+
+        String stockCondition = switch (status) {
+            case IN_STOCK -> "quantity > low_stock_threshold";
+            case LOW_STOCK ->
+                "quantity > 0 AND quantity <= low_stock_threshold";
+            case OUT_OF_STOCK -> "quantity = 0";
+        };
+
+        String column = switch (sortField) {
+            case ID -> "product_id";
+            case NAME -> "product_name";
+            case QUANTITY -> "quantity";
+            case PRICE -> "price_centavos";
+        };
+
+        String direction = switch (sortDirection) {
+            case ASCENDING -> "ASC";
+            case DESCENDING -> "DESC";
+        };
+
+        String sql = """
+            SELECT * FROM products
+            WHERE product_name LIKE ?
+              AND is_active = TRUE
+              AND %s
+            ORDER BY %s %s, product_id ASC
+            """.formatted(stockCondition, column, direction);
+
+        List<Product> products = new ArrayList<>();
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setString(1, "%" + keyword.trim() + "%");
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    Product product = new Product(
+                        rs.getInt("product_id"),
+                        rs.getString("product_name"),
+                        rs.getInt("price_centavos"),
+                        rs.getInt("quantity"),
+                        rs.getInt("low_stock_threshold"),
+                        rs.getBoolean("is_active")
+                    );
+
+                    products.add(product);
+                }
+            }
+        }
+
+        return products;
+    }
 
 }

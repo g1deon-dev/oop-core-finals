@@ -235,36 +235,6 @@ public class ProductService {
 
         return filteredProducts;
     }
-    public List<Product> getProductsByStockStatusSorted(
-            StockStatus status,
-            ProductSortField sortField,
-            SortDirection sortDirection) throws SQLException {
-
-        authorizationService.requireProductManagementAccess();
-
-        if (status == null) {
-            throw new IllegalArgumentException(
-                "Stock status is required."
-            );
-        }
-
-        if (sortField == null) {
-            throw new IllegalArgumentException(
-                "Sort field is required."
-            );
-        }
-
-        if (sortDirection == null) {
-            throw new IllegalArgumentException(
-                "Sort direction is required."
-            );
-        }
-
-        return productDAO.getProductsByStockStatusSorted(
-            status, sortField, sortDirection
-        );
-    }
-
     public List<Product> searchFilterAndSortProducts(
             String keyword,
             StockStatus status,

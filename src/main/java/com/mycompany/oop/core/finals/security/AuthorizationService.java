@@ -47,4 +47,18 @@ public class AuthorizationService {
             );
         }
     }
+
+    public void requireProductViewAccess() {
+        requireLogin();
+
+        UserRole role = session.getCurrentUser().getRole();
+
+        if (role != UserRole.CHAIRPERSON
+                && role != UserRole.BUSINESS_MANAGER
+                && role != UserRole.COMMITTEE_STAFF) {
+            throw new SecurityException(
+                "You do not have permission to view products."
+            );
+        }
+    }
 }

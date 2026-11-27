@@ -1,0 +1,8 @@
+# Database Configuration for Supabase / PostgreSQL
+# Copy this file to `db.properties` in your project root and fill in your Supabase connection details
+
+# Direct Connection URL (or Session Pooler):
+# Format: jdbc:postgresql://<host>:5432/postgres?sslmode=require
+db.url=jdbc:postgresql://db.YOUR_PROJECT_REF.supabase.co:5432/postgres?sslmode=require
+db.user=postgres
+db.password=YOUR_DATABASE_PASSWORD

@@ -68,12 +68,22 @@ public class ProductService {
     }
 
     public List<Product> getAllProducts() throws SQLException {
-        authorizationService.requireProductManagementAccess();
+        authorizationService.requireProductViewAccess();
         return productDAO.getAllProducts();
     }
 
+    public Product getProductById(int productId) throws SQLException {
+        authorizationService.requireProductViewAccess();
+
+        if (productId <= 0) {
+            throw new IllegalArgumentException("Invalid product ID.");
+        }
+
+        return productDAO.getProductById(productId);
+    }
+
     public List<Product> getLowStockProducts() throws SQLException {
-        authorizationService.requireProductManagementAccess();
+        authorizationService.requireProductViewAccess();
 
         List<Product> lowStockProducts = new ArrayList<>();
 
@@ -89,13 +99,27 @@ public class ProductService {
     }
 
     public List<Product> searchProducts(String keyword) throws SQLException {
-        authorizationService.requireProductManagementAccess();
+        authorizationService.requireProductViewAccess();
 
         if(keyword == null || keyword.isBlank()) {
             throw new IllegalArgumentException("Search keyword cannot be empty.");
         }
 
         return productDAO.searchProducts(keyword.trim());
+    }
+
+    public void restockProduct(int productId, int quantityToAdd) throws SQLException {
+        authorizationService.requireProductManagementAccess();
+
+        if (productId <= 0) {
+            throw new IllegalArgumentException("Invalid product ID.");
+        }
+
+        if (quantityToAdd <= 0) {
+            throw new IllegalArgumentException("Quantity to add must be greater than zero.");
+        }
+
+        productDAO.restockProduct(productId, quantityToAdd);
     }
 
     
@@ -179,7 +203,7 @@ public class ProductService {
             ProductSortField sortField,
             SortDirection sortDirection) throws SQLException {
 
-        authorizationService.requireProductManagementAccess();
+        authorizationService.requireProductViewAccess();
 
         if (sortField == null) {
             throw new IllegalArgumentException(
@@ -197,7 +221,7 @@ public class ProductService {
     }
     public List<Product> getProductsByStockStatus(StockStatus status) throws SQLException {
 
-        authorizationService.requireProductManagementAccess();
+        authorizationService.requireProductViewAccess();
 
         if (status == null) {
             throw new IllegalArgumentException(
@@ -235,13 +259,43 @@ public class ProductService {
 
         return filteredProducts;
     }
+	public List<Product> getProductsByStockStatusSorted(
+	        StockStatus status,
+	        ProductSortField sortField,
+	        SortDirection sortDirection) throws SQLException {
+
+	    authorizationService.requireProductViewAccess();
+
+	    if (status == null) {
+	        throw new IllegalArgumentException(
+	            "Stock status is required."
+	        );
+	    }
+
+	    if (sortField == null) {
+	        throw new IllegalArgumentException(
+	            "Sort field is required."
+	        );
+	    }
+
+	    if (sortDirection == null) {
+	        throw new IllegalArgumentException(
+	            "Sort direction is required."
+	        );
+	    }
+
+	    return productDAO.getProductsByStockStatusSorted(
+	        status, sortField, sortDirection
+	    );
+	}
+
     public List<Product> searchFilterAndSortProducts(
             String keyword,
             StockStatus status,
             ProductSortField sortField,
             SortDirection sortDirection) throws SQLException {
 
-        authorizationService.requireProductManagementAccess();
+        authorizationService.requireProductViewAccess();
 
         if (keyword == null || keyword.isBlank()) {
             throw new IllegalArgumentException(

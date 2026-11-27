@@ -44,10 +44,10 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
         jLabel2 = new javax.swing.JLabel();
         lblUsername = new javax.swing.JLabel();
         lblUsername1 = new javax.swing.JLabel();
-        pnlTotalProducts = new RoundedPanel();
+        pnlTotalProducts = new javax.swing.JPanel();
         jLabel3 = new javax.swing.JLabel();
         jLabel6 = new javax.swing.JLabel();
-        pnlTotalStock = new RoundedPanel();
+        pnlTotalStock = new javax.swing.JPanel();
         jLabel9 = new javax.swing.JLabel();
         jLabel10 = new javax.swing.JLabel();
         jPanel2 = new javax.swing.JPanel();
@@ -60,7 +60,7 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
         btnRefresh = new javax.swing.JButton();
         jScrollPane1 = new javax.swing.JScrollPane();
         tblProducts = new javax.swing.JTable();
-        pnlLowStock = new RoundedPanel()
+        pnlLowStock = new javax.swing.JPanel();
         ;
         jLabel11 = new javax.swing.JLabel();
         jLabel12 = new javax.swing.JLabel();

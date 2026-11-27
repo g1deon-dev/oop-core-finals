@@ -107,6 +107,55 @@ public class ProductDAO {
         return products;
     }
 
+    public Product getProductById(int productId) throws SQLException {
+        String sql = """
+            SELECT * FROM products
+            WHERE product_id = ?
+            """;
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, productId);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return new Product(
+                        rs.getInt("product_id"),
+                        rs.getString("product_name"),
+                        rs.getInt("price_centavos"),
+                        rs.getInt("quantity"),
+                        rs.getInt("low_stock_threshold"),
+                        rs.getBoolean("is_active")
+                    );
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public void restockProduct(int productId, int quantityToAdd) throws SQLException {
+        String sql = """
+            UPDATE products
+            SET quantity = quantity + ?
+            WHERE product_id = ? AND is_active = TRUE
+            """;
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, quantityToAdd);
+            stmt.setInt(2, productId);
+
+            int rowsUpdated = stmt.executeUpdate();
+
+            if (rowsUpdated == 0) {
+                throw new SQLException("Product not found or inactive.");
+            }
+        }
+    }
+
     public void updateProduct(Product product) throws SQLException {
 
         String sql = """
@@ -207,7 +256,7 @@ public class ProductDAO {
         String sql = """
             SELECT COUNT(*)
             FROM products
-            WHERE normalized_name = LOWER(TRIM(?))
+            WHERE LOWER(TRIM(product_name)) = LOWER(TRIM(?))
             """;
 
         try (Connection conn = DatabaseConnection.getConnection();
@@ -230,7 +279,7 @@ public class ProductDAO {
         String sql = """
             SELECT COUNT(*)
             FROM products
-            WHERE normalized_name = LOWER(TRIM(?))
+            WHERE LOWER(TRIM(product_name)) = LOWER(TRIM(?))
             AND product_id != ?
             """;
 

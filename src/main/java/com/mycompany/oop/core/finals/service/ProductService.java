@@ -9,8 +9,12 @@ package com.mycompany.oop.core.finals.service;
  * @author g1deon-dev
  */
 
+import com.mycompany.oop.core.finals.model.StockStatus;
+import com.mycompany.oop.core.finals.model.ProductSortField;
+import com.mycompany.oop.core.finals.model.SortDirection;
 import com.mycompany.oop.core.finals.dao.ProductDAO;
 import com.mycompany.oop.core.finals.model.Product;
+import com.mycompany.oop.core.finals.model.StockStatus;
 import com.mycompany.oop.core.finals.security.AuthorizationService;
 
 import java.util.ArrayList;
@@ -64,12 +68,22 @@ public class ProductService {
     }
 
     public List<Product> getAllProducts() throws SQLException {
-        authorizationService.requireProductManagementAccess();
+        authorizationService.requireProductViewAccess();
         return productDAO.getAllProducts();
     }
 
+    public Product getProductById(int productId) throws SQLException {
+        authorizationService.requireProductViewAccess();
+
+        if (productId <= 0) {
+            throw new IllegalArgumentException("Invalid product ID.");
+        }
+
+        return productDAO.getProductById(productId);
+    }
+
     public List<Product> getLowStockProducts() throws SQLException {
-        authorizationService.requireProductManagementAccess();
+        authorizationService.requireProductViewAccess();
 
         List<Product> lowStockProducts = new ArrayList<>();
 
@@ -85,13 +99,27 @@ public class ProductService {
     }
 
     public List<Product> searchProducts(String keyword) throws SQLException {
-        authorizationService.requireProductManagementAccess();
+        authorizationService.requireProductViewAccess();
 
         if(keyword == null || keyword.isBlank()) {
             throw new IllegalArgumentException("Search keyword cannot be empty.");
         }
 
         return productDAO.searchProducts(keyword.trim());
+    }
+
+    public void restockProduct(int productId, int quantityToAdd) throws SQLException {
+        authorizationService.requireProductManagementAccess();
+
+        if (productId <= 0) {
+            throw new IllegalArgumentException("Invalid product ID.");
+        }
+
+        if (quantityToAdd <= 0) {
+            throw new IllegalArgumentException("Quantity to add must be greater than zero.");
+        }
+
+        productDAO.restockProduct(productId, quantityToAdd);
     }
 
     
@@ -170,4 +198,120 @@ public class ProductService {
 
         this.authorizationService = authorizationService;
     }
+
+    public List<Product> getSortedProducts(
+            ProductSortField sortField,
+            SortDirection sortDirection) throws SQLException {
+
+        authorizationService.requireProductViewAccess();
+
+        if (sortField == null) {
+            throw new IllegalArgumentException(
+                "Sort field is required."
+            );
+        }
+
+        if (sortDirection == null) {
+            throw new IllegalArgumentException(
+                "Sort direction is required."
+            );
+        }
+
+        return productDAO.getSortedProducts(sortField, sortDirection);
+    }
+    public List<Product> getProductsByStockStatus(StockStatus status) throws SQLException {
+
+        authorizationService.requireProductViewAccess();
+
+        if (status == null) {
+            throw new IllegalArgumentException(
+                "Stock status is required."
+            );
+        }
+
+        List<Product> filteredProducts = new ArrayList<>();
+
+        for (Product product : productDAO.getAllProducts()) {
+
+            int quantity = product.getQuantity();
+            int threshold = product.getLowStockThreshold();
+
+            switch (status) {
+                case IN_STOCK -> {
+                    if (quantity > threshold) {
+                        filteredProducts.add(product);
+                    }
+                }
+
+                case LOW_STOCK -> {
+                    if (quantity > 0 && quantity <= threshold) {
+                        filteredProducts.add(product);
+                    }
+                }
+
+                case OUT_OF_STOCK -> {
+                    if (quantity == 0) {
+                        filteredProducts.add(product);
+                    }
+                }
+            }
+        }
+
+        return filteredProducts;
+    }
+	public List<Product> getProductsByStockStatusSorted(
+	        StockStatus status,
+	        ProductSortField sortField,
+	        SortDirection sortDirection) throws SQLException {
+
+	    authorizationService.requireProductViewAccess();
+
+	    if (status == null) {
+	        throw new IllegalArgumentException(
+	            "Stock status is required."
+	        );
+	    }
+
+	    if (sortField == null) {
+	        throw new IllegalArgumentException(
+	            "Sort field is required."
+	        );
+	    }
+
+	    if (sortDirection == null) {
+	        throw new IllegalArgumentException(
+	            "Sort direction is required."
+	        );
+	    }
+
+	    return productDAO.getProductsByStockStatusSorted(
+	        status, sortField, sortDirection
+	    );
+	}
+
+    public List<Product> searchFilterAndSortProducts(
+            String keyword,
+            StockStatus status,
+            ProductSortField sortField,
+            SortDirection sortDirection) throws SQLException {
+
+        authorizationService.requireProductViewAccess();
+
+        if (keyword == null || keyword.isBlank()) {
+            throw new IllegalArgumentException(
+                "Search keyword cannot be empty."
+            );
+        }
+
+        if (status == null || sortField == null || sortDirection == null) {
+            throw new IllegalArgumentException(
+                "Stock status, sort field, and direction are required."
+            );
+        }
+
+        return productDAO.searchFilterAndSortProducts(
+            keyword.trim(), status, sortField, sortDirection
+        );
+    }
+
 }

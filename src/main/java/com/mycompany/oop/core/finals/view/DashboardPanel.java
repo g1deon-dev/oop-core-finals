@@ -1,23 +1,36 @@
 package com.mycompany.oop.core.finals.view;
 
-import com.mycompany.oop.core.finals.dao.ProductDAO;
-import com.mycompany.oop.core.finals.dao.SaleDAO;
 import com.mycompany.oop.core.finals.model.Product;
 import com.mycompany.oop.core.finals.model.Rental;
 import com.mycompany.oop.core.finals.model.RentalStatus;
 import com.mycompany.oop.core.finals.model.Sale;
+import com.mycompany.oop.core.finals.model.StockMovement;
 import com.mycompany.oop.core.finals.model.StockStatus;
+import com.mycompany.oop.core.finals.model.UserRole;
+import com.mycompany.oop.core.finals.security.AuthorizationService;
 import com.mycompany.oop.core.finals.security.UserSession;
+import com.mycompany.oop.core.finals.service.AuthService;
+import com.mycompany.oop.core.finals.service.InventoryService;
+import com.mycompany.oop.core.finals.service.ProductService;
 import com.mycompany.oop.core.finals.service.RentalService;
+import com.mycompany.oop.core.finals.service.SalesService;
 
 import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPasswordField;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.JTextField;
 import javax.swing.SwingConstants;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
@@ -25,22 +38,18 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridLayout;
 import java.awt.Insets;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.Toolkit;
+import java.net.URL;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/GUIForms/JFrame.java to edit this template
- */
 
 /**
  *
@@ -52,14 +61,19 @@ public class DashboardPanel extends javax.swing.JFrame {
     private static final DateTimeFormatter MONTH_FMT = DateTimeFormatter.ofPattern("MMMM yyyy");
 
     private UserSession session;
-    private final ProductDAO productDAO = new ProductDAO();
-    private final SaleDAO saleDAO = new SaleDAO();
+    private AuthorizationService authService;
+    private ProductService productService;
+    private InventoryService inventoryService;
+    private SalesService salesService;
     private final RentalService rentalService = new RentalService();
 
+    private final JButton btnPromosNav = new JButton("PROMOS");
     private YearMonth currentMonth = YearMonth.now();
     private LocalDate selectedDate = LocalDate.now();
     private List<Rental> cachedRentals = new ArrayList<>();
     private List<Product> cachedProducts = new ArrayList<>();
+    private List<StockMovement> cachedMovements = new ArrayList<>();
+    private DefaultTableModel dashboardStockModel;
     private DefaultListModel<String> activityListModel;
 
     /**
@@ -70,91 +84,301 @@ public class DashboardPanel extends javax.swing.JFrame {
     }
 
     public DashboardPanel(UserSession session) {
-        this.session = session;
         initComponents();
-        setLocationRelativeTo(null);
-        setupNavigation();
+        initBackend(session);
+    }
+
+    private void initBackend(UserSession session) {
+        this.session = session;
+        polishLayout();
         setupDashboardWidgets();
+        setupListeners();
+
+        if (session == null || !session.isLoggedIn()) {
+            return;
+        }
+
+        this.authService = new AuthorizationService(session);
+        this.productService = new ProductService(authService);
+        this.inventoryService = new InventoryService(authService, session);
+        this.salesService = new SalesService(authService, session);
+
+        String fullName = session.getCurrentUser().getFullName();
+        jLabel2.setText("Welcome back, " + fullName + "!");
+        jLabel5.setText(fullName);
+        jLabel4.setText(session.getCurrentUser().getRole().name());
+
         loadDashboardData();
     }
 
-    private void setupNavigation() {
-        jButton3.addActionListener(e -> {
-            new MerchInventoryPanel(session).setVisible(true);
-            this.dispose();
-        });
-        jButton7.addActionListener(e -> {
-            new RentalServicePanel(session).setVisible(true);
-            this.dispose();
-        });
-        MouseAdapter promoNav = new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                new PromosPanel(session).setVisible(true);
-                dispose();
-            }
-        };
-        jPanel4.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        jLabel6.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        jPanel4.addMouseListener(promoNav);
-        jLabel6.addMouseListener(promoNav);
+    private void polishLayout() {
+        setTitle("CORE — Dashboard");
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 
-        jButton5.addActionListener(e -> JOptionPane.showMessageDialog(
-                this,
-                session != null && session.isLoggedIn()
-                        ? "Logged in as " + session.getCurrentUser().getFullName() + " (" + session.getCurrentUser().getRole() + ")"
-                        : "Not logged in.",
-                "Settings",
-                JOptionPane.INFORMATION_MESSAGE));
+        Color sidebarBg = new Color(30, 30, 30);
+        Color headerNavy = new Color(9, 30, 57);
+        Color activeNavBg = new Color(11, 52, 90);
+        Color accentIce = new Color(192, 210, 224);
+        Color textLight = new Color(245, 245, 245);
+        Color cardBg = new Color(227, 232, 238);
+        Color subTitleBlue = new Color(33, 86, 124);
+
+        // ── Sidebar (matched to MerchInventoryPanel & PromosPanel) ───────────
+        jPanel2.setBackground(sidebarBg);
+        jPanel2.setBorder(BorderFactory.createEtchedBorder(null, Color.lightGray));
+        jPanel2.removeAll();
+        jPanel2.setLayout(new BorderLayout());
+
+        JPanel navPanel = new JPanel();
+        navPanel.setOpaque(false);
+        navPanel.setLayout(new BoxLayout(navPanel, BoxLayout.Y_AXIS));
+        navPanel.setBorder(BorderFactory.createEmptyBorder(24, 16, 0, 16));
+
+        JLabel lblLogo = new JLabel();
+        lblLogo.setAlignmentX(Component.LEFT_ALIGNMENT);
+        lblLogo.setMaximumSize(new Dimension(Integer.MAX_VALUE, 86));
+        lblLogo.setPreferredSize(new Dimension(210, 86));
+        URL logoUrl = getClass().getResource("/com/mycompany/oop/core/finals/view/logo.png");
+        if (logoUrl != null) {
+            lblLogo.setIcon(new ImageIcon(logoUrl));
+            lblLogo.setHorizontalAlignment(SwingConstants.CENTER);
+        } else {
+            lblLogo.setText("CORE");
+            lblLogo.setFont(new Font("Agency FB", Font.BOLD, 36));
+            lblLogo.setForeground(accentIce);
+        }
+        navPanel.add(lblLogo);
+        navPanel.add(Box.createVerticalStrut(48));
+
+        // Active: DASHBOARD
+        jbtnDashBoard.setText("DASHBOARD");
+        styleSidebarButton(jbtnDashBoard, true, activeNavBg, accentIce, textLight);
+        navPanel.add(jbtnDashBoard);
+        navPanel.add(Box.createVerticalStrut(6));
+
+        // Inactive nav items
+        jButton3.setText("MERCH INVENTORY");
+        styleSidebarButton(jButton3, false, activeNavBg, accentIce, textLight);
+        navPanel.add(jButton3);
+        navPanel.add(Box.createVerticalStrut(6));
+
+        styleSidebarButton(btnPromosNav, false, activeNavBg, accentIce, textLight);
+        navPanel.add(btnPromosNav);
+        navPanel.add(Box.createVerticalStrut(6));
+
+        jButton7.setText("RENTAL SERVICE");
+        styleSidebarButton(jButton7, false, activeNavBg, accentIce, textLight);
+        navPanel.add(jButton7);
+
+        jPanel2.add(navPanel, BorderLayout.NORTH);
+
+        JPanel bottomPanel = new JPanel();
+        bottomPanel.setOpaque(false);
+        bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.Y_AXIS));
+        bottomPanel.setBorder(BorderFactory.createEmptyBorder(0, 16, 32, 16));
+
+        jButton5.setText("Settings");
+        styleSidebarButton(jButton5, false, activeNavBg, accentIce, accentIce);
+        jButton5.setFont(new Font("Segoe UI Historic", Font.PLAIN, 12));
+        bottomPanel.add(jButton5);
+        bottomPanel.add(Box.createVerticalStrut(4));
+
+        jButton6.setText("Log Out");
+        styleSidebarButton(jButton6, false, activeNavBg, accentIce, accentIce);
+        jButton6.setFont(new Font("Segoe UI Historic", Font.PLAIN, 12));
+        bottomPanel.add(jButton6);
+
+        jPanel2.add(bottomPanel, BorderLayout.SOUTH);
+
+        // ── Header (matched to MerchInventoryPanel) ──────────────────────────
+        jPanel3.setBackground(headerNavy);
+        jLabel2.setFont(new Font("Agency FB", Font.BOLD, 44));
+        jLabel2.setForeground(textLight);
+        jPanel3.add(jLabel2, new org.netbeans.lib.awtextra.AbsoluteConstraints(24, 22, 650, 52));
+
+        jLabel3.setFont(new Font("Segoe UI Historic", Font.PLAIN, 14));
+        jLabel3.setForeground(textLight);
+        jPanel3.add(jLabel3, new org.netbeans.lib.awtextra.AbsoluteConstraints(24, 82, 500, 24));
+
+        jLabel5.setFont(new Font("Segoe UI Historic", Font.BOLD, 12));
+        jLabel5.setForeground(textLight);
+        jLabel5.setHorizontalAlignment(SwingConstants.CENTER);
+        jPanel3.add(jLabel5, new org.netbeans.lib.awtextra.AbsoluteConstraints(860, 56, 150, 20));
+
+        jLabel4.setFont(new Font("Segoe UI Historic", Font.PLAIN, 12));
+        jLabel4.setForeground(accentIce);
+        jLabel4.setHorizontalAlignment(SwingConstants.CENTER);
+        jPanel3.add(jLabel4, new org.netbeans.lib.awtextra.AbsoluteConstraints(860, 76, 150, 20));
+
+        // ── Main Content & Cards (matched to MerchInventoryPanel) ────────────
+        Color cardMedium = new Color(191, 205, 221);
+        Color darkText = new Color(30, 30, 30);
+
+        jPanel1.setBackground(textLight);
+        jPanel6.setBackground(cardBg);
+        jPanel7.setBackground(cardBg);
+        jPanel8.setBackground(cardBg);
+
+        jPanel14.setBackground(cardMedium);
+        jPanel15.setBackground(textLight);
+        jPanel9.setBackground(textLight);
+        jPanel10.setBackground(textLight);
+        jPanel11.setBackground(textLight);
+        jPanel12.setBackground(textLight);
+        jPanel13.setBackground(textLight);
+
+        // Card section headers
+        jLabel14.setFont(new Font("Segoe UI Historic", Font.BOLD, 18));
+        jLabel14.setForeground(headerNavy);
+        jLabel9.setFont(new Font("Segoe UI Historic", Font.BOLD, 14));
+        jLabel9.setForeground(subTitleBlue);
+        jLabel8.setFont(new Font("Segoe UI Historic", Font.BOLD, 18));
+        jLabel8.setForeground(headerNavy);
+
+        JLabel[] dayHeaders = { jLabel7, jLabel11, jLabel12, jLabel13, jLabel54, jLabel55, jLabel56 };
+        for (JLabel dh : dayHeaders) {
+            dh.setFont(new Font("Segoe UI Historic", Font.BOLD, 13));
+            dh.setForeground(subTitleBlue);
+        }
+
+        // Calendar day numbers on light card
+        JLabel[] calDays = {
+            jLabel26, jLabel66, jLabel67, jLabel68, jLabel69, jLabel70, jLabel71,
+            jLabel72, jLabel73, jLabel74, jLabel75, jLabel76, jLabel77, jLabel78,
+            jLabel80, jLabel81, jLabel82, jLabel83, jLabel85, jLabel86, jLabel87,
+            jLabel88, jLabel90, jLabel91, jLabel92, jLabel93, jLabel95, jLabel96,
+            jLabel97, jLabel98
+        };
+        for (JLabel cd : calDays) {
+            cd.setForeground(subTitleBlue);
+        }
+
+        // Total Sales card typography (matched to pnlTotalStock)
+        jLabel27.setFont(new Font("Segoe UI Historic", Font.BOLD, 16));
+        jLabel27.setForeground(headerNavy);
+        jLabel21.setText("PHP");
+        jLabel21.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        jLabel21.setForeground(subTitleBlue);
+        jPanel14.add(jLabel21, new org.netbeans.lib.awtextra.AbsoluteConstraints(35, 85, 40, 30));
+        jLabel23.setFont(new Font("Segoe UI", Font.BOLD, 42));
+        jLabel23.setForeground(subTitleBlue);
+        jLabel24.setFont(new Font("Segoe UI Historic", Font.BOLD, 13));
+        jLabel24.setForeground(headerNavy);
+        jLabel22.setFont(new Font("Segoe UI Historic", Font.PLAIN, 13));
+        jLabel22.setForeground(headerNavy);
+        jLabel20.setFont(new Font("Segoe UI Historic", Font.PLAIN, 13));
+        jLabel20.setForeground(headerNavy);
+
+        // Stock Status card typography
+        jLabel28.setFont(new Font("Segoe UI Historic", Font.BOLD, 16));
+        jLabel28.setForeground(headerNavy);
+        JLabel[] stockLabels = { jLabel29, jLabel30, jLabel31, jLabel32, jLabel25 };
+        for (JLabel sl : stockLabels) {
+            sl.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+            sl.setForeground(darkText);
+        }
+
+        // Recent Activities labels
+        jPanel10.add(jLabel16, new org.netbeans.lib.awtextra.AbsoluteConstraints(14, 10, 435, 20));
+        jPanel11.add(jLabel17, new org.netbeans.lib.awtextra.AbsoluteConstraints(14, 10, 435, 20));
+        jPanel12.add(jLabel18, new org.netbeans.lib.awtextra.AbsoluteConstraints(14, 10, 435, 20));
+        jPanel13.add(jLabel15, new org.netbeans.lib.awtextra.AbsoluteConstraints(14, 10, 435, 20));
+        JLabel[] actLabels = { jLabel16, jLabel17, jLabel18, jLabel15 };
+        for (JLabel al : actLabels) {
+            al.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+            al.setForeground(subTitleBlue);
+        }
+
+        // Wrap jPanel1 in a JScrollPane so it fits smaller laptop screens
+        JScrollPane scroll = new JScrollPane(jPanel1);
+        scroll.setBorder(null);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        scroll.getHorizontalScrollBar().setUnitIncrement(16);
+
+        getContentPane().removeAll();
+        getContentPane().setLayout(new BorderLayout());
+        getContentPane().add(scroll, BorderLayout.CENTER);
+
+        Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
+        int width = Math.min(1280, screen.width - 40);
+        int height = Math.min(800, screen.height - 60);
+        setSize(width, height);
+        setLocationRelativeTo(null);
+    }
+
+    private void styleSidebarButton(JButton btn, boolean active, Color activeBg, Color accentIce, Color fg) {
+        btn.setFont(new Font("Segoe UI Historic", Font.BOLD, 14));
+        btn.setForeground(fg);
+        btn.setHorizontalAlignment(SwingConstants.LEFT);
+        btn.setVerticalAlignment(SwingConstants.CENTER);
+        btn.setFocusPainted(false);
+        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        btn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        btn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
+        btn.setPreferredSize(new Dimension(210, 36));
+        if (active) {
+            btn.setBackground(activeBg);
+            btn.setOpaque(true);
+            btn.setContentAreaFilled(true);
+            btn.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 3, 0, 0, accentIce),
+                BorderFactory.createEmptyBorder(0, 9, 0, 12)
+            ));
+        } else {
+            btn.setOpaque(false);
+            btn.setContentAreaFilled(false);
+            btn.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 12));
+        }
     }
 
     private void setupDashboardWidgets() {
-        if (session != null && session.isLoggedIn()) {
-            String fullName = session.getCurrentUser().getFullName();
-            jLabel2.setText("Welcome back, " + fullName + "!");
-            jLabel5.setText(fullName);
-            jLabel4.setText(session.getCurrentUser().getRole().name());
-        }
+        Color headerNavy = new Color(9, 30, 57);
+        Color subTitleBlue = new Color(33, 86, 124);
+        Color textLight = new Color(245, 245, 245);
+        Color darkText = new Color(30, 30, 30);
+        Color borderSoft = new Color(206, 214, 224);
 
         // 1. Make Stock Status card (jPanel15) scrollable with live table
         jPanel15.removeAll();
         jPanel15.setLayout(new BorderLayout(0, 8));
         jPanel15.setBorder(BorderFactory.createEmptyBorder(14, 18, 14, 18));
 
-        JLabel lblStockHeader = new JLabel("Stock Status");
-        lblStockHeader.setFont(new Font("Yu Gothic UI", Font.BOLD, 15));
-        lblStockHeader.setForeground(new Color(245, 245, 245));
-        jPanel15.add(lblStockHeader, BorderLayout.NORTH);
+        jLabel28.setText("Stock Status");
+        jLabel28.setFont(new Font("Segoe UI Historic", Font.BOLD, 16));
+        jLabel28.setForeground(headerNavy);
+        jPanel15.add(jLabel28, BorderLayout.NORTH);
 
-        DefaultTableModel stockModel = new DefaultTableModel(new String[]{"Product", "Qty", "Status"}, 0) {
+        dashboardStockModel = new DefaultTableModel(new String[]{"Product", "Qty", "Status"}, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false;
             }
         };
-        JTable tblStock = new JTable(stockModel);
-        tblStock.setBackground(new Color(18, 56, 104));
-        tblStock.setForeground(new Color(245, 245, 245));
-        tblStock.setGridColor(new Color(33, 76, 130));
+        JTable tblStock = new JTable(dashboardStockModel);
+        tblStock.setBackground(Color.WHITE);
+        tblStock.setForeground(darkText);
+        tblStock.setGridColor(borderSoft);
         tblStock.setRowHeight(26);
-        tblStock.setFont(new Font("Yu Gothic UI", Font.PLAIN, 13));
-        tblStock.getTableHeader().setFont(new Font("Yu Gothic UI", Font.BOLD, 12));
+        tblStock.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        tblStock.getTableHeader().setFont(new Font("Segoe UI Historic", Font.BOLD, 12));
+        tblStock.getTableHeader().setForeground(headerNavy);
         tblStock.getColumnModel().getColumn(1).setPreferredWidth(60);
         tblStock.getColumnModel().getColumn(1).setMaxWidth(80);
-        tblStock.getColumnModel().getColumn(2).setPreferredWidth(110);
-        tblStock.getColumnModel().getColumn(2).setMaxWidth(130);
+        tblStock.getColumnModel().getColumn(2).setPreferredWidth(115);
+        tblStock.getColumnModel().getColumn(2).setMaxWidth(135);
         tblStock.getColumnModel().getColumn(2).setCellRenderer(new DefaultTableCellRenderer() {
             @Override
             public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int col) {
                 Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, col);
                 String s = value != null ? value.toString() : "";
                 if ("OUT OF STOCK".equals(s)) {
-                    c.setForeground(new Color(255, 110, 110));
+                    c.setForeground(new Color(185, 28, 28));
                 } else if ("LOW STOCK".equals(s)) {
-                    c.setForeground(new Color(255, 195, 77));
+                    c.setForeground(new Color(180, 83, 9));
                 } else {
-                    c.setForeground(new Color(110, 231, 155));
+                    c.setForeground(new Color(21, 128, 61));
                 }
+                setFont(getFont().deriveFont(Font.BOLD));
                 setHorizontalAlignment(SwingConstants.CENTER);
                 return c;
             }
@@ -162,8 +386,8 @@ public class DashboardPanel extends javax.swing.JFrame {
         tblStock.setName("tblDashboardStock");
 
         JScrollPane stockScroll = new JScrollPane(tblStock);
-        stockScroll.setBorder(BorderFactory.createLineBorder(new Color(33, 76, 130)));
-        stockScroll.getViewport().setBackground(new Color(18, 56, 104));
+        stockScroll.setBorder(BorderFactory.createLineBorder(borderSoft));
+        stockScroll.getViewport().setBackground(Color.WHITE);
         jPanel15.add(stockScroll, BorderLayout.CENTER);
         jPanel15.revalidate();
         jPanel15.repaint();
@@ -173,8 +397,10 @@ public class DashboardPanel extends javax.swing.JFrame {
         JButton btnNextMonth = new JButton(">");
         for (JButton b : new JButton[]{btnPrevMonth, btnNextMonth}) {
             b.setMargin(new Insets(1, 6, 1, 6));
-            b.setFont(new Font("Yu Gothic UI", Font.BOLD, 12));
+            b.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            b.setForeground(headerNavy);
             b.setFocusPainted(false);
+            b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         }
         btnPrevMonth.addActionListener(e -> {
             currentMonth = currentMonth.minusMonths(1);
@@ -184,9 +410,9 @@ public class DashboardPanel extends javax.swing.JFrame {
             currentMonth = currentMonth.plusMonths(1);
             renderCalendar();
         });
-        jPanel6.add(btnPrevMonth, new org.netbeans.lib.awtextra.AbsoluteConstraints(310, 10, 35, 26));
-        jPanel6.add(btnNextMonth, new org.netbeans.lib.awtextra.AbsoluteConstraints(460, 10, 35, 26));
-        jPanel6.add(jLabel9, new org.netbeans.lib.awtextra.AbsoluteConstraints(350, 10, 110, 26));
+        jPanel6.add(btnPrevMonth, new org.netbeans.lib.awtextra.AbsoluteConstraints(305, 10, 38, 26));
+        jPanel6.add(jLabel9, new org.netbeans.lib.awtextra.AbsoluteConstraints(348, 10, 115, 26));
+        jPanel6.add(btnNextMonth, new org.netbeans.lib.awtextra.AbsoluteConstraints(468, 10, 38, 26));
         jLabel9.setHorizontalAlignment(SwingConstants.CENTER);
 
         jPanel9.removeAll();
@@ -196,76 +422,98 @@ public class DashboardPanel extends javax.swing.JFrame {
         // 3. Make Recent Activities / Selected Date & Stock Status (jPanel8) scrollable
         jPanel8.removeAll();
         jPanel8.setLayout(new BorderLayout(0, 8));
-        jPanel8.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
+        jPanel8.setBorder(BorderFactory.createEmptyBorder(14, 18, 14, 18));
 
         jLabel8.setText("Date Schedule & Stock Status");
+        jLabel8.setFont(new Font("Segoe UI Historic", Font.BOLD, 18));
+        jLabel8.setForeground(headerNavy);
         jPanel8.add(jLabel8, BorderLayout.NORTH);
 
         activityListModel = new DefaultListModel<>();
         JList<String> activityList = new JList<>(activityListModel);
-        activityList.setBackground(new Color(13, 47, 90));
-        activityList.setForeground(new Color(240, 244, 248));
-        activityList.setFont(new Font("Yu Gothic UI", Font.PLAIN, 13));
-        activityList.setFixedCellHeight(28);
+        activityList.setBackground(textLight);
+        activityList.setForeground(subTitleBlue);
+        activityList.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        activityList.setFixedCellHeight(26);
         JScrollPane actScroll = new JScrollPane(activityList);
-        actScroll.setBorder(BorderFactory.createLineBorder(new Color(33, 76, 130)));
+        actScroll.setBorder(BorderFactory.createLineBorder(borderSoft));
         jPanel8.add(actScroll, BorderLayout.CENTER);
         jPanel8.revalidate();
         jPanel8.repaint();
     }
 
+    private void setupListeners() {
+        jbtnDashBoard.addActionListener(e -> loadDashboardData());
+        jButton3.addActionListener(e -> {
+            new MerchInventoryPanel(session).setVisible(true);
+            this.dispose();
+        });
+        btnPromosNav.addActionListener(e -> {
+            new PromosPanel(session).setVisible(true);
+            this.dispose();
+        });
+        jButton7.addActionListener(e -> {
+            new RentalServicePanel(session).setVisible(true);
+            this.dispose();
+        });
+        jButton5.addActionListener(e -> showAccountSettings());
+    }
+
     private void loadDashboardData() {
-        // Load Total Sales
+        if (session == null || !session.isLoggedIn()) {
+            return;
+        }
         try {
-            List<Sale> sales = saleDAO.getAllSales();
+            // 1. Total Sales
+            List<Sale> sales = salesService.getAllSales();
             long totalCentavos = 0;
             for (Sale s : sales) {
                 totalCentavos += s.getTotalCentavos();
             }
-            jLabel21.setText("PHP");
-            jLabel21.setFont(new Font("Yu Gothic UI", Font.BOLD, 14));
             jLabel23.setText(String.format("%,.2f", totalCentavos / 100.0));
-            jLabel23.setFont(new Font("Yu Gothic UI", Font.BOLD, 34));
-            jLabel20.setText(YearMonth.now().format(MONTH_FMT));
-        } catch (SQLException ex) {
-            logger.warning("Could not load sales for dashboard: " + ex.getMessage());
-        }
+            jLabel20.setText(LocalDate.now().format(MONTH_FMT));
+            jLabel24.setText(sales.size() + " sales");
+            jLabel22.setText("CORE Inventory");
 
-        // Load Stock Status
-        try {
-            cachedProducts = productDAO.getAllProducts();
-            for (Component comp : jPanel15.getComponents()) {
-                if (comp instanceof JScrollPane sp && sp.getViewport().getView() instanceof JTable tbl) {
-                    DefaultTableModel model = (DefaultTableModel) tbl.getModel();
-                    model.setRowCount(0);
-                    for (Product p : cachedProducts) {
-                        StockStatus st = computeStockStatus(p);
-                        String statusLabel = switch (st) {
-                            case OUT_OF_STOCK -> "OUT OF STOCK";
-                            case LOW_STOCK -> "LOW STOCK";
-                            case IN_STOCK -> "IN STOCK";
-                        };
-                        model.addRow(new Object[]{p.getProductName(), p.getQuantity(), statusLabel});
-                    }
+            // 2. Stock Status (all active products in scrollable table)
+            cachedProducts = productService.getAllProducts();
+            if (dashboardStockModel != null) {
+                dashboardStockModel.setRowCount(0);
+                for (Product p : cachedProducts) {
+                    StockStatus st = computeStockStatus(p);
+                    String statusLabel = switch (st) {
+                        case OUT_OF_STOCK -> "OUT OF STOCK";
+                        case LOW_STOCK -> "LOW STOCK";
+                        case IN_STOCK -> "IN STOCK";
+                    };
+                    dashboardStockModel.addRow(new Object[]{p.getProductName(), p.getQuantity(), statusLabel});
                 }
             }
-        } catch (SQLException ex) {
-            logger.warning("Could not load products for dashboard: " + ex.getMessage());
-        }
 
-        // Load Rentals for Calendar
-        try {
-            cachedRentals = rentalService.getAllRentals();
-        } catch (SQLException ex) {
-            cachedRentals = new ArrayList<>();
-            logger.warning("Could not load rentals for calendar: " + ex.getMessage());
-        }
+            // 3. Recent Activities (latest stock movements)
+            cachedMovements = inventoryService.getAllMovements();
 
-        renderCalendar();
-        updateSelectedDateDetails(selectedDate);
+            // 4. Rentals for Calendar
+            try {
+                cachedRentals = rentalService.getAllRentals();
+            } catch (SQLException ex) {
+                cachedRentals = new ArrayList<>();
+                logger.warning("Could not load rentals for calendar: " + ex.getMessage());
+            }
+
+            renderCalendar();
+            updateSelectedDateDetails(selectedDate);
+        } catch (SecurityException | SQLException ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Dashboard", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private void renderCalendar() {
+        Color headerNavy = new Color(9, 30, 57);
+        Color activeNavBg = new Color(11, 52, 90);
+        Color subTitleBlue = new Color(33, 86, 124);
+        Color cardBg = new Color(227, 232, 238);
+
         jLabel9.setText(currentMonth.format(MONTH_FMT));
         jPanel9.removeAll();
 
@@ -287,22 +535,25 @@ public class DashboardPanel extends javax.swing.JFrame {
             boolean isSelected = date.equals(selectedDate);
 
             JButton dayBtn = new JButton(String.valueOf(dayNum));
-            dayBtn.setFont(new Font("Yu Gothic UI", Font.BOLD, 12));
+            dayBtn.setFont(new Font("Segoe UI", Font.BOLD, 12));
             dayBtn.setMargin(new Insets(0, 0, 0, 0));
             dayBtn.setFocusPainted(false);
-            dayBtn.setForeground(Color.WHITE);
             dayBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
             if (isSelected) {
-                dayBtn.setBackground(new Color(0, 140, 210));
-                dayBtn.setBorder(BorderFactory.createLineBorder(Color.WHITE, 2));
+                dayBtn.setBackground(activeNavBg);
+                dayBtn.setForeground(Color.WHITE);
+                dayBtn.setBorder(BorderFactory.createLineBorder(new Color(0, 140, 210), 2));
             } else if (hasRental) {
-                dayBtn.setBackground(new Color(22, 115, 65));
+                dayBtn.setBackground(new Color(21, 128, 61));
+                dayBtn.setForeground(Color.WHITE);
                 dayBtn.setToolTipText("Has scheduled rental(s)");
             } else if (isToday) {
-                dayBtn.setBackground(new Color(35, 95, 165));
+                dayBtn.setBackground(subTitleBlue);
+                dayBtn.setForeground(Color.WHITE);
             } else {
-                dayBtn.setBackground(new Color(18, 58, 108));
+                dayBtn.setBackground(cardBg);
+                dayBtn.setForeground(headerNavy);
             }
 
             dayBtn.addActionListener(e -> {
@@ -363,6 +614,21 @@ public class DashboardPanel extends javax.swing.JFrame {
                 activityListModel.addElement("  " + tag + " " + p.getProductName() + " — Qty: " + p.getQuantity());
             }
         }
+
+        activityListModel.addElement("── Recent Stock Movements ──");
+        if (cachedMovements.isEmpty()) {
+            activityListModel.addElement("  No recent stock movements.");
+        } else {
+            int limit = Math.min(6, cachedMovements.size());
+            for (int i = 0; i < limit; i++) {
+                StockMovement m = cachedMovements.get(i);
+                String sign = m.getChangeAmount() > 0 ? "+" : "";
+                activityListModel.addElement(String.format(
+                        "  Product #%d  %s%d  (%s)",
+                        m.getProductId(), sign, m.getChangeAmount(), m.getReason()
+                ));
+            }
+        }
     }
 
     private StockStatus computeStockStatus(Product p) {
@@ -373,6 +639,59 @@ public class DashboardPanel extends javax.swing.JFrame {
             return StockStatus.LOW_STOCK;
         }
         return StockStatus.IN_STOCK;
+    }
+
+    private void showAccountSettings() {
+        if (session == null || !session.isLoggedIn()) {
+            JOptionPane.showMessageDialog(this, "No active user session.", "Settings", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        UserRole role = session.getCurrentUser().getRole();
+        boolean isAdmin = role == UserRole.CHAIRPERSON || role == UserRole.BUSINESS_MANAGER;
+        String info = "User: " + session.getCurrentUser().getFullName()
+            + "\nUsername: " + session.getCurrentUser().getUsername()
+            + "\nRole: " + role.name()
+            + "\nAccess Level: " + (isAdmin ? "Admin (Full Inventory & Approval Access)" : "Staff (View, Search, Sales, Request)");
+
+        if (role == UserRole.CHAIRPERSON) {
+            Object[] options = {"Create New Account", "Close"};
+            int choice = JOptionPane.showOptionDialog(this, info, "Account & System Info",
+                JOptionPane.YES_NO_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[1]);
+            if (choice == 0) {
+                createUserAccount();
+            }
+        } else {
+            JOptionPane.showMessageDialog(this, info, "Account & System Info", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+    private void createUserAccount() {
+        JTextField usernameField = new JTextField();
+        JTextField fullNameField = new JTextField();
+        JPasswordField passwordField = new JPasswordField();
+        JComboBox<UserRole> roleBox = new JComboBox<>(UserRole.values());
+        JPanel form = new JPanel(new GridLayout(0, 2, 8, 8));
+        form.add(new JLabel("Username:"));
+        form.add(usernameField);
+        form.add(new JLabel("Full Name:"));
+        form.add(fullNameField);
+        form.add(new JLabel("Password (min 8 chars):"));
+        form.add(passwordField);
+        form.add(new JLabel("Role:"));
+        form.add(roleBox);
+
+        int result = JOptionPane.showConfirmDialog(this, form, "Create User Account",
+            JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result != JOptionPane.OK_OPTION) {
+            return;
+        }
+        try {
+            new AuthService(session).createUser(usernameField.getText(), fullNameField.getText(),
+                new String(passwordField.getPassword()), (UserRole) roleBox.getSelectedItem());
+            JOptionPane.showMessageDialog(this, "Account created successfully!", "User Management", JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Settings", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     /**
@@ -957,12 +1276,19 @@ public class DashboardPanel extends javax.swing.JFrame {
 
     private void jButton6ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton6ActionPerformed
         int confirm = JOptionPane.showConfirmDialog(
-            this, "Are you sure you want to log out?", "Log Out", JOptionPane.YES_NO_OPTION);
-        if (confirm == JOptionPane.YES_OPTION) {
-            if (session != null) session.endSession();
-            new LoginFrame().setVisible(true);
-            this.dispose();
+            this,
+            "Are you sure you want to log out?",
+            "Log Out",
+            JOptionPane.YES_NO_OPTION
+        );
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
         }
+        if (session != null) {
+            session.endSession();
+        }
+        new LoginFrame().setVisible(true);
+        this.dispose();
     }//GEN-LAST:event_jButton6ActionPerformed
 
     /**

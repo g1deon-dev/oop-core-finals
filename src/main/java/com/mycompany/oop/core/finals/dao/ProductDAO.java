@@ -21,21 +21,49 @@ import java.util.List;
 public class ProductDAO {
     
     public void addProduct(Product product) throws SQLException {
-    
+        addProductAndReturnId(product);
+    }
+
+    public int addProductAndReturnId(Product product) throws SQLException {
         String sql = """
                      INSERT INTO products
                      (product_name, price_centavos, quantity, low_stock_threshold)
                      VALUES (?,?,?,?)
                      """;
-        
-        try(Connection conn = DatabaseConnection.getConnection();
-            PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             stmt.setString(1, product.getProductName());
             stmt.setInt(2, product.getPriceCentavos());
             stmt.setInt(3, product.getQuantity());
             stmt.setInt(4, product.getLowStockThreshold());
-            
+
             stmt.executeUpdate();
+            try (ResultSet keys = stmt.getGeneratedKeys()) {
+                if (keys.next()) {
+                    return keys.getInt(1);
+                }
+            }
+            return 0;
+        }
+    }
+
+    public void adjustStock(Connection conn, int productId, int delta) throws SQLException {
+        String sql = """
+            UPDATE products
+            SET quantity = quantity + ?
+            WHERE product_id = ? AND is_active = TRUE AND quantity + ? >= 0
+            """;
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, delta);
+            stmt.setInt(2, productId);
+            stmt.setInt(3, delta);
+
+            int rowsUpdated = stmt.executeUpdate();
+            if (rowsUpdated == 0) {
+                throw new SQLException("Product not found, inactive, or insufficient stock for deduction.");
+            }
         }
     }
     

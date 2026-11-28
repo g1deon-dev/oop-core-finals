@@ -1,5 +1,42 @@
 package com.mycompany.oop.core.finals.view;
 
+import com.mycompany.oop.core.finals.dao.ProductDAO;
+import com.mycompany.oop.core.finals.dao.SaleDAO;
+import com.mycompany.oop.core.finals.model.Product;
+import com.mycompany.oop.core.finals.model.Rental;
+import com.mycompany.oop.core.finals.model.RentalStatus;
+import com.mycompany.oop.core.finals.model.Sale;
+import com.mycompany.oop.core.finals.model.StockStatus;
+import com.mycompany.oop.core.finals.security.UserSession;
+import com.mycompany.oop.core.finals.service.RentalService;
+
+import javax.swing.BorderFactory;
+import javax.swing.DefaultListModel;
+import javax.swing.JButton;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JOptionPane;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.SwingConstants;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.DefaultTableModel;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Font;
+import java.awt.GridLayout;
+import java.awt.Insets;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+
 /*
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/GUIForms/JFrame.java to edit this template
@@ -12,12 +49,330 @@ package com.mycompany.oop.core.finals.view;
 public class DashboardPanel extends javax.swing.JFrame {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(DashboardPanel.class.getName());
+    private static final DateTimeFormatter MONTH_FMT = DateTimeFormatter.ofPattern("MMMM yyyy");
+
+    private UserSession session;
+    private final ProductDAO productDAO = new ProductDAO();
+    private final SaleDAO saleDAO = new SaleDAO();
+    private final RentalService rentalService = new RentalService();
+
+    private YearMonth currentMonth = YearMonth.now();
+    private LocalDate selectedDate = LocalDate.now();
+    private List<Rental> cachedRentals = new ArrayList<>();
+    private List<Product> cachedProducts = new ArrayList<>();
+    private DefaultListModel<String> activityListModel;
 
     /**
      * Creates new form DashboardPanel
      */
     public DashboardPanel() {
+        this(null);
+    }
+
+    public DashboardPanel(UserSession session) {
+        this.session = session;
         initComponents();
+        setLocationRelativeTo(null);
+        setupNavigation();
+        setupDashboardWidgets();
+        loadDashboardData();
+    }
+
+    private void setupNavigation() {
+        jButton3.addActionListener(e -> {
+            new MerchInventoryPanel(session).setVisible(true);
+            this.dispose();
+        });
+        jButton7.addActionListener(e -> {
+            new RentalServicePanel(session).setVisible(true);
+            this.dispose();
+        });
+        MouseAdapter promoNav = new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                new PromosPanel(session).setVisible(true);
+                dispose();
+            }
+        };
+        jPanel4.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        jLabel6.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        jPanel4.addMouseListener(promoNav);
+        jLabel6.addMouseListener(promoNav);
+
+        jButton5.addActionListener(e -> JOptionPane.showMessageDialog(
+                this,
+                session != null && session.isLoggedIn()
+                        ? "Logged in as " + session.getCurrentUser().getFullName() + " (" + session.getCurrentUser().getRole() + ")"
+                        : "Not logged in.",
+                "Settings",
+                JOptionPane.INFORMATION_MESSAGE));
+    }
+
+    private void setupDashboardWidgets() {
+        if (session != null && session.isLoggedIn()) {
+            String fullName = session.getCurrentUser().getFullName();
+            jLabel2.setText("Welcome back, " + fullName + "!");
+            jLabel5.setText(fullName);
+            jLabel4.setText(session.getCurrentUser().getRole().name());
+        }
+
+        // 1. Make Stock Status card (jPanel15) scrollable with live table
+        jPanel15.removeAll();
+        jPanel15.setLayout(new BorderLayout(0, 8));
+        jPanel15.setBorder(BorderFactory.createEmptyBorder(14, 18, 14, 18));
+
+        JLabel lblStockHeader = new JLabel("Stock Status");
+        lblStockHeader.setFont(new Font("Yu Gothic UI", Font.BOLD, 15));
+        lblStockHeader.setForeground(new Color(245, 245, 245));
+        jPanel15.add(lblStockHeader, BorderLayout.NORTH);
+
+        DefaultTableModel stockModel = new DefaultTableModel(new String[]{"Product", "Qty", "Status"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        JTable tblStock = new JTable(stockModel);
+        tblStock.setBackground(new Color(18, 56, 104));
+        tblStock.setForeground(new Color(245, 245, 245));
+        tblStock.setGridColor(new Color(33, 76, 130));
+        tblStock.setRowHeight(26);
+        tblStock.setFont(new Font("Yu Gothic UI", Font.PLAIN, 13));
+        tblStock.getTableHeader().setFont(new Font("Yu Gothic UI", Font.BOLD, 12));
+        tblStock.getColumnModel().getColumn(1).setPreferredWidth(60);
+        tblStock.getColumnModel().getColumn(1).setMaxWidth(80);
+        tblStock.getColumnModel().getColumn(2).setPreferredWidth(110);
+        tblStock.getColumnModel().getColumn(2).setMaxWidth(130);
+        tblStock.getColumnModel().getColumn(2).setCellRenderer(new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int col) {
+                Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, col);
+                String s = value != null ? value.toString() : "";
+                if ("OUT OF STOCK".equals(s)) {
+                    c.setForeground(new Color(255, 110, 110));
+                } else if ("LOW STOCK".equals(s)) {
+                    c.setForeground(new Color(255, 195, 77));
+                } else {
+                    c.setForeground(new Color(110, 231, 155));
+                }
+                setHorizontalAlignment(SwingConstants.CENTER);
+                return c;
+            }
+        });
+        tblStock.setName("tblDashboardStock");
+
+        JScrollPane stockScroll = new JScrollPane(tblStock);
+        stockScroll.setBorder(BorderFactory.createLineBorder(new Color(33, 76, 130)));
+        stockScroll.getViewport().setBackground(new Color(18, 56, 104));
+        jPanel15.add(stockScroll, BorderLayout.CENTER);
+        jPanel15.revalidate();
+        jPanel15.repaint();
+
+        // 2. Make Calendar (jPanel6 + jPanel9) interactive with < and > month controls
+        JButton btnPrevMonth = new JButton("<");
+        JButton btnNextMonth = new JButton(">");
+        for (JButton b : new JButton[]{btnPrevMonth, btnNextMonth}) {
+            b.setMargin(new Insets(1, 6, 1, 6));
+            b.setFont(new Font("Yu Gothic UI", Font.BOLD, 12));
+            b.setFocusPainted(false);
+        }
+        btnPrevMonth.addActionListener(e -> {
+            currentMonth = currentMonth.minusMonths(1);
+            renderCalendar();
+        });
+        btnNextMonth.addActionListener(e -> {
+            currentMonth = currentMonth.plusMonths(1);
+            renderCalendar();
+        });
+        jPanel6.add(btnPrevMonth, new org.netbeans.lib.awtextra.AbsoluteConstraints(310, 10, 35, 26));
+        jPanel6.add(btnNextMonth, new org.netbeans.lib.awtextra.AbsoluteConstraints(460, 10, 35, 26));
+        jPanel6.add(jLabel9, new org.netbeans.lib.awtextra.AbsoluteConstraints(350, 10, 110, 26));
+        jLabel9.setHorizontalAlignment(SwingConstants.CENTER);
+
+        jPanel9.removeAll();
+        jPanel9.setLayout(new GridLayout(6, 7, 4, 4));
+        jPanel9.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
+
+        // 3. Make Recent Activities / Selected Date & Stock Status (jPanel8) scrollable
+        jPanel8.removeAll();
+        jPanel8.setLayout(new BorderLayout(0, 8));
+        jPanel8.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
+
+        jLabel8.setText("Date Schedule & Stock Status");
+        jPanel8.add(jLabel8, BorderLayout.NORTH);
+
+        activityListModel = new DefaultListModel<>();
+        JList<String> activityList = new JList<>(activityListModel);
+        activityList.setBackground(new Color(13, 47, 90));
+        activityList.setForeground(new Color(240, 244, 248));
+        activityList.setFont(new Font("Yu Gothic UI", Font.PLAIN, 13));
+        activityList.setFixedCellHeight(28);
+        JScrollPane actScroll = new JScrollPane(activityList);
+        actScroll.setBorder(BorderFactory.createLineBorder(new Color(33, 76, 130)));
+        jPanel8.add(actScroll, BorderLayout.CENTER);
+        jPanel8.revalidate();
+        jPanel8.repaint();
+    }
+
+    private void loadDashboardData() {
+        // Load Total Sales
+        try {
+            List<Sale> sales = saleDAO.getAllSales();
+            long totalCentavos = 0;
+            for (Sale s : sales) {
+                totalCentavos += s.getTotalCentavos();
+            }
+            jLabel21.setText("PHP");
+            jLabel21.setFont(new Font("Yu Gothic UI", Font.BOLD, 14));
+            jLabel23.setText(String.format("%,.2f", totalCentavos / 100.0));
+            jLabel23.setFont(new Font("Yu Gothic UI", Font.BOLD, 34));
+            jLabel20.setText(YearMonth.now().format(MONTH_FMT));
+        } catch (SQLException ex) {
+            logger.warning("Could not load sales for dashboard: " + ex.getMessage());
+        }
+
+        // Load Stock Status
+        try {
+            cachedProducts = productDAO.getAllProducts();
+            for (Component comp : jPanel15.getComponents()) {
+                if (comp instanceof JScrollPane sp && sp.getViewport().getView() instanceof JTable tbl) {
+                    DefaultTableModel model = (DefaultTableModel) tbl.getModel();
+                    model.setRowCount(0);
+                    for (Product p : cachedProducts) {
+                        StockStatus st = computeStockStatus(p);
+                        String statusLabel = switch (st) {
+                            case OUT_OF_STOCK -> "OUT OF STOCK";
+                            case LOW_STOCK -> "LOW STOCK";
+                            case IN_STOCK -> "IN STOCK";
+                        };
+                        model.addRow(new Object[]{p.getProductName(), p.getQuantity(), statusLabel});
+                    }
+                }
+            }
+        } catch (SQLException ex) {
+            logger.warning("Could not load products for dashboard: " + ex.getMessage());
+        }
+
+        // Load Rentals for Calendar
+        try {
+            cachedRentals = rentalService.getAllRentals();
+        } catch (SQLException ex) {
+            cachedRentals = new ArrayList<>();
+            logger.warning("Could not load rentals for calendar: " + ex.getMessage());
+        }
+
+        renderCalendar();
+        updateSelectedDateDetails(selectedDate);
+    }
+
+    private void renderCalendar() {
+        jLabel9.setText(currentMonth.format(MONTH_FMT));
+        jPanel9.removeAll();
+
+        LocalDate firstDay = currentMonth.atDay(1);
+        int startOffset = firstDay.getDayOfWeek().getValue() % 7; // Sun=0, Mon=1, ..., Sat=6
+        int daysInMonth = currentMonth.lengthOfMonth();
+        LocalDate today = LocalDate.now();
+
+        for (int cell = 0; cell < 42; cell++) {
+            int dayNum = cell - startOffset + 1;
+            if (dayNum < 1 || dayNum > daysInMonth) {
+                JLabel blank = new JLabel("");
+                jPanel9.add(blank);
+                continue;
+            }
+            LocalDate date = currentMonth.atDay(dayNum);
+            boolean hasRental = hasRentalOnDate(date);
+            boolean isToday = date.equals(today);
+            boolean isSelected = date.equals(selectedDate);
+
+            JButton dayBtn = new JButton(String.valueOf(dayNum));
+            dayBtn.setFont(new Font("Yu Gothic UI", Font.BOLD, 12));
+            dayBtn.setMargin(new Insets(0, 0, 0, 0));
+            dayBtn.setFocusPainted(false);
+            dayBtn.setForeground(Color.WHITE);
+            dayBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+            if (isSelected) {
+                dayBtn.setBackground(new Color(0, 140, 210));
+                dayBtn.setBorder(BorderFactory.createLineBorder(Color.WHITE, 2));
+            } else if (hasRental) {
+                dayBtn.setBackground(new Color(22, 115, 65));
+                dayBtn.setToolTipText("Has scheduled rental(s)");
+            } else if (isToday) {
+                dayBtn.setBackground(new Color(35, 95, 165));
+            } else {
+                dayBtn.setBackground(new Color(18, 58, 108));
+            }
+
+            dayBtn.addActionListener(e -> {
+                selectedDate = date;
+                renderCalendar();
+                updateSelectedDateDetails(date);
+            });
+            jPanel9.add(dayBtn);
+        }
+        jPanel9.revalidate();
+        jPanel9.repaint();
+    }
+
+    private boolean hasRentalOnDate(LocalDate date) {
+        for (Rental r : cachedRentals) {
+            if (r.getStatus() == RentalStatus.CANCELLED) continue;
+            if (r.getRentalStart() == null || r.getExpectedReturn() == null) continue;
+            LocalDate start = r.getRentalStart().toLocalDate();
+            LocalDate end = r.getExpectedReturn().toLocalDate();
+            if (!date.isBefore(start) && !date.isAfter(end)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void updateSelectedDateDetails(LocalDate date) {
+        if (activityListModel == null) return;
+        activityListModel.clear();
+        activityListModel.addElement("Selected Date: " + date.toString());
+
+        int rentalCount = 0;
+        for (Rental r : cachedRentals) {
+            if (r.getStatus() == RentalStatus.CANCELLED) continue;
+            if (r.getRentalStart() == null || r.getExpectedReturn() == null) continue;
+            LocalDate start = r.getRentalStart().toLocalDate();
+            LocalDate end = r.getExpectedReturn().toLocalDate();
+            if (!date.isBefore(start) && !date.isAfter(end)) {
+                rentalCount++;
+                activityListModel.addElement("  [RENTAL #" + r.getRentalId() + "] "
+                        + r.getCustomerName() + " (" + r.getStatus() + ") - " + r.getVenue());
+            }
+        }
+        if (rentalCount == 0) {
+            activityListModel.addElement("  No rentals scheduled on this date.");
+        }
+
+        activityListModel.addElement("── Stock Status Summary ──");
+        if (cachedProducts.isEmpty()) {
+            activityListModel.addElement("  No active products loaded.");
+        } else {
+            for (Product p : cachedProducts) {
+                String tag = switch (computeStockStatus(p)) {
+                    case OUT_OF_STOCK -> "[OUT OF STOCK]";
+                    case LOW_STOCK -> "[LOW STOCK]";
+                    case IN_STOCK -> "[IN STOCK]";
+                };
+                activityListModel.addElement("  " + tag + " " + p.getProductName() + " — Qty: " + p.getQuantity());
+            }
+        }
+    }
+
+    private StockStatus computeStockStatus(Product p) {
+        if (p.getQuantity() <= 0) {
+            return StockStatus.OUT_OF_STOCK;
+        }
+        if (p.getQuantity() <= p.getLowStockThreshold()) {
+            return StockStatus.LOW_STOCK;
+        }
+        return StockStatus.IN_STOCK;
     }
 
     /**
@@ -601,7 +956,13 @@ public class DashboardPanel extends javax.swing.JFrame {
     }// </editor-fold>//GEN-END:initComponents
 
     private void jButton6ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton6ActionPerformed
-        // TODO add your handling code here:
+        int confirm = JOptionPane.showConfirmDialog(
+            this, "Are you sure you want to log out?", "Log Out", JOptionPane.YES_NO_OPTION);
+        if (confirm == JOptionPane.YES_OPTION) {
+            if (session != null) session.endSession();
+            new LoginFrame().setVisible(true);
+            this.dispose();
+        }
     }//GEN-LAST:event_jButton6ActionPerformed
 
     /**

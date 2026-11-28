@@ -4,6 +4,25 @@
  */
 package com.mycompany.oop.core.finals.view;
 
+import com.mycompany.oop.core.finals.model.Rental;
+import com.mycompany.oop.core.finals.model.RentalItem;
+import com.mycompany.oop.core.finals.model.RentalPayment;
+import com.mycompany.oop.core.finals.security.UserSession;
+import com.mycompany.oop.core.finals.service.RentalPaymentService;
+import com.mycompany.oop.core.finals.service.RentalService;
+
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPopupMenu;
+import javax.swing.table.DefaultTableModel;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.sql.SQLException;
+import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Collectors;
+
 /**
  *
  * @author Admin
@@ -11,12 +30,205 @@ package com.mycompany.oop.core.finals.view;
 public class RentalServicePanel2 extends javax.swing.JFrame {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(RentalServicePanel2.class.getName());
+    private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+    private UserSession session;
+    private RentalService rentalService;
+    private RentalPaymentService paymentService;
 
     /**
-     * Creates new form RentalServicePanel
+     * Creates new form RentalServicePanel2
      */
     public RentalServicePanel2() {
+        this(null);
+    }
+
+    public RentalServicePanel2(UserSession session) {
         initComponents();
+        initBackend(session);
+    }
+
+    private void initBackend(UserSession session) {
+        this.session = session;
+        this.rentalService = new RentalService();
+        this.paymentService = new RentalPaymentService();
+
+        polishLayout();
+        setupListeners();
+
+        if (session != null && session.isLoggedIn()) {
+            jLabel2.setText(session.getCurrentUser().getFullName());
+            jLabel1.setText(session.getCurrentUser().getRole().name());
+            loadRentals(null, false);
+        }
+    }
+
+    private void polishLayout() {
+        jPanel4.setVisible(false);
+
+        javax.swing.border.Border navPadding = javax.swing.BorderFactory.createEmptyBorder(0, 12, 0, 12);
+
+        btnDashboard.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        btnDashboard.setBorder(navPadding);
+        btnDashboard.setMaximumSize(null);
+        btnDashboard.setMinimumSize(null);
+        btnDashboard.setPreferredSize(null);
+
+        btnMerchInventory.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        btnMerchInventory.setBorder(navPadding);
+        btnMerchInventory.setMaximumSize(null);
+        btnMerchInventory.setMinimumSize(null);
+        btnMerchInventory.setPreferredSize(null);
+
+        btnPromos.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        btnPromos.setBorder(navPadding);
+        btnPromos.setMaximumSize(null);
+        btnPromos.setMinimumSize(null);
+        btnPromos.setPreferredSize(null);
+        btnPromos.setForeground(new java.awt.Color(245, 245, 245));
+
+        btnRentalService.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        btnRentalService.setBorder(javax.swing.BorderFactory.createCompoundBorder(
+            javax.swing.BorderFactory.createMatteBorder(0, 3, 0, 0, new java.awt.Color(192, 210, 224)),
+            javax.swing.BorderFactory.createEmptyBorder(0, 9, 0, 12)
+        ));
+        btnRentalService.setMaximumSize(null);
+        btnRentalService.setMinimumSize(null);
+        btnRentalService.setPreferredSize(null);
+        btnRentalService.setOpaque(true);
+
+        jButton6.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        jButton6.setBorder(navPadding);
+        jButton6.setMaximumSize(null);
+        jButton6.setMinimumSize(null);
+        jButton6.setPreferredSize(null);
+
+        jButton5.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        jButton5.setBorder(navPadding);
+        jButton5.setMaximumSize(null);
+        jButton5.setMinimumSize(null);
+        jButton5.setPreferredSize(null);
+        jButton5.setForeground(new java.awt.Color(192, 210, 224));
+
+        javax.swing.JLabel lblLogo = new javax.swing.JLabel();
+        lblLogo.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
+        java.net.URL logoUrl = getClass().getResource("/com/mycompany/oop/core/finals/view/logo.png");
+        if (logoUrl != null) {
+            lblLogo.setIcon(new javax.swing.ImageIcon(logoUrl));
+        }
+
+        javax.swing.GroupLayout sidebarLayout = new javax.swing.GroupLayout(jPanel2);
+        jPanel2.removeAll();
+        jPanel2.setLayout(sidebarLayout);
+        sidebarLayout.setHorizontalGroup(
+            sidebarLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(sidebarLayout.createSequentialGroup()
+                .addGap(16, 16, 16)
+                .addGroup(sidebarLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addComponent(lblLogo, javax.swing.GroupLayout.DEFAULT_SIZE, 209, Short.MAX_VALUE)
+                    .addComponent(btnDashboard, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(btnMerchInventory, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(btnPromos, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(btnRentalService, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(jButton6, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(jButton5, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                .addGap(16, 16, 16))
+        );
+        sidebarLayout.setVerticalGroup(
+            sidebarLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(sidebarLayout.createSequentialGroup()
+                .addGap(24, 24, 24)
+                .addComponent(lblLogo, javax.swing.GroupLayout.PREFERRED_SIZE, 86, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(48, 48, 48)
+                .addComponent(btnDashboard, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(btnMerchInventory, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(btnPromos, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(btnRentalService, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(jButton6, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jButton5, javax.swing.GroupLayout.PREFERRED_SIZE, 32, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(47, 47, 47))
+        );
+
+        btnEdit.setText("Sort by ID");
+        btnEdit1.setText("Sort by Name");
+
+        pack();
+        setLocationRelativeTo(null);
+    }
+
+    private void setupListeners() {
+        btnDashboard.addActionListener(e -> {
+            new DashboardPanel(session).setVisible(true);
+            this.dispose();
+        });
+        btnMerchInventory.addActionListener(e -> {
+            new MerchInventoryPanel(session).setVisible(true);
+            this.dispose();
+        });
+        btnPromos.addActionListener(e -> {
+            new PromosPanel(session).setVisible(true);
+            this.dispose();
+        });
+        btnRentalService.addActionListener(e -> {
+            new RentalServicePanel(session).setVisible(true);
+            this.dispose();
+        });
+        jButton6.addActionListener(e -> showAccountSettings());
+        jButton1.addActionListener(e -> {
+            new RentalServicePanel(session).setVisible(true);
+            this.dispose();
+        });
+        jButton2.addActionListener(e -> loadRentals(txtSearch.getText().trim(), false));
+
+        btnSearch.addActionListener(e -> loadRentals(txtSearch.getText().trim(), false));
+        txtSearch.addActionListener(e -> loadRentals(txtSearch.getText().trim(), false));
+        btnEdit.addActionListener(e -> loadRentals(txtSearch.getText().trim(), false));
+        btnEdit1.addActionListener(e -> loadRentals(txtSearch.getText().trim(), true));
+
+        setupTableContextMenu();
+    }
+
+    private void setupTableContextMenu() {
+        JPopupMenu menu = new JPopupMenu();
+
+        JMenuItem miDetails = new JMenuItem("View Items & Payments");
+        miDetails.addActionListener(e -> handleViewDetails());
+
+        JMenuItem miStart = new JMenuItem("Start Rental (Mark ONGOING)");
+        miStart.addActionListener(e -> handleStatusAction("START"));
+
+        JMenuItem miReturn = new JMenuItem("Mark Returned");
+        miReturn.addActionListener(e -> handleStatusAction("RETURN"));
+
+        JMenuItem miCancel = new JMenuItem("Cancel Rental");
+        miCancel.addActionListener(e -> handleStatusAction("CANCEL"));
+
+        JMenuItem miPay = new JMenuItem("Mark Pending Payment Paid");
+        miPay.addActionListener(e -> handleMarkPaid());
+
+        menu.add(miDetails);
+        menu.addSeparator();
+        menu.add(miStart);
+        menu.add(miReturn);
+        menu.add(miCancel);
+        menu.addSeparator();
+        menu.add(miPay);
+
+        tblProducts.setComponentPopupMenu(menu);
+        tblProducts.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                int row = tblProducts.rowAtPoint(e.getPoint());
+                if (row >= 0 && row < tblProducts.getRowCount()) {
+                    tblProducts.setRowSelectionInterval(row, row);
+                }
+            }
+        });
     }
 
     /**
@@ -455,8 +667,174 @@ public class RentalServicePanel2 extends javax.swing.JFrame {
     }// </editor-fold>//GEN-END:initComponents
 
     private void jButton5ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton5ActionPerformed
-        // TODO add your handling code here:
+        int confirm = JOptionPane.showConfirmDialog(
+            this, "Are you sure you want to log out?", "Log Out", JOptionPane.YES_NO_OPTION);
+        if (confirm == JOptionPane.YES_OPTION) {
+            if (session != null) session.endSession();
+            new LoginFrame().setVisible(true);
+            this.dispose();
+        }
     }//GEN-LAST:event_jButton5ActionPerformed
+
+    private void loadRentals(String keyword, boolean sortByName) {
+        try {
+            List<Rental> rentals = (keyword == null || keyword.isBlank())
+                    ? rentalService.getAllRentals()
+                    : rentalService.searchRentals(keyword.trim());
+
+            if (sortByName) {
+                rentals.sort(Comparator.comparing(
+                        r -> r.getCustomerName() == null ? "" : r.getCustomerName(),
+                        String.CASE_INSENSITIVE_ORDER));
+            } else {
+                rentals.sort(Comparator.comparingInt(Rental::getRentalId).reversed());
+            }
+
+            DefaultTableModel model = new DefaultTableModel(
+                    new String[]{"Rental ID", "Customer Name", "Equipment", "Start Time", "Return Time", "Status"}, 0) {
+                @Override
+                public boolean isCellEditable(int row, int column) {
+                    return false;
+                }
+            };
+
+            for (Rental r : rentals) {
+                String equipSummary = "-";
+                try {
+                    List<RentalItem> items = rentalService.getRentalItems(r.getRentalId());
+                    if (!items.isEmpty()) {
+                        equipSummary = items.stream()
+                                .map(it -> it.getProductName() + (it.getQuantity() > 1 ? " x" + it.getQuantity() : ""))
+                                .collect(Collectors.joining(", "));
+                    }
+                } catch (SQLException ignored) {
+                }
+
+                String startStr = r.getRentalStart() != null ? r.getRentalStart().format(DT_FMT) : "-";
+                String returnStr = r.getActualReturn() != null
+                        ? r.getActualReturn().format(DT_FMT)
+                        : (r.getExpectedReturn() != null ? r.getExpectedReturn().format(DT_FMT) : "-");
+                String statusStr = r.getStatus() != null ? r.getStatus().name() : "-";
+                if (rentalService.isOverdue(r)) {
+                    statusStr = statusStr + " (OVERDUE)";
+                }
+
+                model.addRow(new Object[]{
+                    r.getRentalId(),
+                    r.getCustomerName(),
+                    equipSummary,
+                    startStr,
+                    returnStr,
+                    statusStr
+                });
+            }
+            tblProducts.setModel(model);
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Failed to load rentals: " + ex.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private Integer getSelectedRentalId() {
+        int row = tblProducts.getSelectedRow();
+        if (row < 0) {
+            JOptionPane.showMessageDialog(this, "Please select a rental row first.", "No Selection", JOptionPane.WARNING_MESSAGE);
+            return null;
+        }
+        Object val = tblProducts.getValueAt(row, 0);
+        if (val instanceof Integer) {
+            return (Integer) val;
+        }
+        try {
+            return Integer.parseInt(String.valueOf(val));
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private void handleViewDetails() {
+        Integer rentalId = getSelectedRentalId();
+        if (rentalId == null) return;
+        try {
+            Rental r = rentalService.getRentalById(rentalId);
+            if (r == null) return;
+            List<RentalItem> items = rentalService.getRentalItems(rentalId);
+            List<RentalPayment> payments = paymentService.getPaymentsByRentalId(rentalId);
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("Rental #").append(r.getRentalId()).append(" (").append(r.getStatus()).append(")\n");
+            sb.append("Customer: ").append(r.getCustomerName()).append("\n");
+            sb.append("Contact: ").append(r.getContactNumber()).append("\n");
+            sb.append("Venue: ").append(r.getVenue()).append("\n\n");
+            sb.append("Items:\n");
+            for (RentalItem it : items) {
+                sb.append(String.format(" - %s x%d (PHP %,.2f)\n",
+                        it.getProductName(), it.getQuantity(), it.getTotalPriceCentavos() / 100.0));
+            }
+            sb.append("\nPayments:\n");
+            if (payments.isEmpty()) {
+                sb.append(" - None recorded\n");
+            } else {
+                for (RentalPayment p : payments) {
+                    sb.append(String.format(" - Payment #%d: PHP %,.2f [%s] (%s)\n",
+                            p.getPaymentId(), p.getAmountCentavos() / 100.0, p.getPaymentMethod(), p.getPaymentStatus()));
+                }
+            }
+            JOptionPane.showMessageDialog(this, sb.toString(), "Rental Details", JOptionPane.INFORMATION_MESSAGE);
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Database error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void handleStatusAction(String action) {
+        Integer rentalId = getSelectedRentalId();
+        if (rentalId == null) return;
+        try {
+            switch (action) {
+                case "START" -> rentalService.startRental(rentalId);
+                case "RETURN" -> rentalService.returnRental(rentalId);
+                case "CANCEL" -> rentalService.cancelRental(rentalId);
+            }
+            JOptionPane.showMessageDialog(this, "Rental #" + rentalId + " updated.", "Success", JOptionPane.INFORMATION_MESSAGE);
+            loadRentals(txtSearch.getText().trim(), false);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Action Failed", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    private void handleMarkPaid() {
+        Integer rentalId = getSelectedRentalId();
+        if (rentalId == null) return;
+        try {
+            List<RentalPayment> payments = paymentService.getPaymentsByRentalId(rentalId);
+            RentalPayment pending = payments.stream()
+                    .filter(p -> !"PAID".equalsIgnoreCase(p.getPaymentStatus()))
+                    .findFirst()
+                    .orElse(null);
+            if (pending == null) {
+                JOptionPane.showMessageDialog(this, "No pending payment found for Rental #" + rentalId + ".", "Payments", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+            paymentService.markPaymentAsPaid(pending.getPaymentId());
+            JOptionPane.showMessageDialog(this,
+                    String.format("Payment #%d (PHP %,.2f) marked as PAID.",
+                            pending.getPaymentId(), pending.getAmountCentavos() / 100.0),
+                    "Payment Updated",
+                    JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void showAccountSettings() {
+        if (session == null || !session.isLoggedIn()) {
+            JOptionPane.showMessageDialog(this, "Not logged in.", "Settings", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        String info = "User: " + session.getCurrentUser().getFullName()
+                + "\nUsername: " + session.getCurrentUser().getUsername()
+                + "\nRole: " + session.getCurrentUser().getRole().name();
+        JOptionPane.showMessageDialog(this, info, "Account & System Info", JOptionPane.INFORMATION_MESSAGE);
+    }
 
     /**
      * @param args the command line arguments

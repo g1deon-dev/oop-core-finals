@@ -4,6 +4,30 @@
  */
 package com.mycompany.oop.core.finals.view;
 
+import com.mycompany.oop.core.finals.model.Rental;
+import com.mycompany.oop.core.finals.model.RentalItem;
+import com.mycompany.oop.core.finals.model.RentalStatus;
+import com.mycompany.oop.core.finals.security.UserSession;
+import com.mycompany.oop.core.finals.service.RentalPaymentService;
+import com.mycompany.oop.core.finals.service.RentalService;
+
+import javax.swing.DefaultComboBoxModel;
+import javax.swing.JComboBox;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import java.awt.GridLayout;
+import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 /**
  *
  * @author Admin
@@ -11,12 +35,216 @@ package com.mycompany.oop.core.finals.view;
 public class RentalServicePanel extends javax.swing.JFrame {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(RentalServicePanel.class.getName());
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
+
+    private UserSession session;
+    private RentalService rentalService;
+    private RentalPaymentService paymentService;
+
+    private final Map<String, Integer> equipmentRatesCentavos = new LinkedHashMap<>();
+    private final List<Rental> displayedPendingRentals = new ArrayList<>();
 
     /**
      * Creates new form RentalServicePanel
      */
     public RentalServicePanel() {
+        this(null);
+    }
+
+    public RentalServicePanel(UserSession session) {
         initComponents();
+        initBackend(session);
+    }
+
+    private void initBackend(UserSession session) {
+        this.session = session;
+        this.rentalService = new RentalService();
+        this.paymentService = new RentalPaymentService();
+
+        polishLayout();
+        populateFormOptions();
+        setupListeners();
+
+        if (session != null && session.isLoggedIn()) {
+            jLabel2.setText(session.getCurrentUser().getFullName());
+            jLabel1.setText(session.getCurrentUser().getRole().name());
+            loadPendingCancellations();
+        } else {
+            clearCancellationCards();
+        }
+    }
+
+    private void polishLayout() {
+        jLabel5.setText("Manage equipment rentals, monitor booking statuses, and track equipment returns.");
+        jPanel4.setVisible(false);
+
+        javax.swing.border.Border navPadding = javax.swing.BorderFactory.createEmptyBorder(0, 12, 0, 12);
+
+        btnDashboard.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        btnDashboard.setBorder(navPadding);
+        btnDashboard.setMaximumSize(null);
+        btnDashboard.setMinimumSize(null);
+        btnDashboard.setPreferredSize(null);
+
+        btnMerchInventory.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        btnMerchInventory.setBorder(navPadding);
+        btnMerchInventory.setMaximumSize(null);
+        btnMerchInventory.setMinimumSize(null);
+        btnMerchInventory.setPreferredSize(null);
+
+        btnPromos.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        btnPromos.setBorder(navPadding);
+        btnPromos.setMaximumSize(null);
+        btnPromos.setMinimumSize(null);
+        btnPromos.setPreferredSize(null);
+        btnPromos.setForeground(new java.awt.Color(245, 245, 245));
+
+        btnRentalService.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        btnRentalService.setBorder(javax.swing.BorderFactory.createCompoundBorder(
+            javax.swing.BorderFactory.createMatteBorder(0, 3, 0, 0, new java.awt.Color(192, 210, 224)),
+            javax.swing.BorderFactory.createEmptyBorder(0, 9, 0, 12)
+        ));
+        btnRentalService.setMaximumSize(null);
+        btnRentalService.setMinimumSize(null);
+        btnRentalService.setPreferredSize(null);
+        btnRentalService.setOpaque(true);
+
+        jButton6.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        jButton6.setBorder(navPadding);
+        jButton6.setMaximumSize(null);
+        jButton6.setMinimumSize(null);
+        jButton6.setPreferredSize(null);
+
+        jButton5.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        jButton5.setBorder(navPadding);
+        jButton5.setMaximumSize(null);
+        jButton5.setMinimumSize(null);
+        jButton5.setPreferredSize(null);
+        jButton5.setForeground(new java.awt.Color(192, 210, 224));
+
+        JLabel lblLogo = new JLabel();
+        lblLogo.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
+        java.net.URL logoUrl = getClass().getResource("/com/mycompany/oop/core/finals/view/logo.png");
+        if (logoUrl != null) {
+            lblLogo.setIcon(new javax.swing.ImageIcon(logoUrl));
+        }
+
+        javax.swing.GroupLayout sidebarLayout = new javax.swing.GroupLayout(jPanel2);
+        jPanel2.removeAll();
+        jPanel2.setLayout(sidebarLayout);
+        sidebarLayout.setHorizontalGroup(
+            sidebarLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(sidebarLayout.createSequentialGroup()
+                .addGap(16, 16, 16)
+                .addGroup(sidebarLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addComponent(lblLogo, javax.swing.GroupLayout.DEFAULT_SIZE, 209, Short.MAX_VALUE)
+                    .addComponent(btnDashboard, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(btnMerchInventory, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(btnPromos, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(btnRentalService, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(jButton6, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(jButton5, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                .addGap(16, 16, 16))
+        );
+        sidebarLayout.setVerticalGroup(
+            sidebarLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(sidebarLayout.createSequentialGroup()
+                .addGap(24, 24, 24)
+                .addComponent(lblLogo, javax.swing.GroupLayout.PREFERRED_SIZE, 86, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(48, 48, 48)
+                .addComponent(btnDashboard, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(btnMerchInventory, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(btnPromos, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(btnRentalService, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(jButton6, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jButton5, javax.swing.GroupLayout.PREFERRED_SIZE, 32, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(47, 47, 47))
+        );
+
+        jLabel6.setFont(new java.awt.Font("Segoe UI Historic", java.awt.Font.BOLD, 14));
+        jLabel6.setText("Total Amount: PHP 0.00");
+
+        pack();
+        setLocationRelativeTo(null);
+    }
+
+    private void populateFormOptions() {
+        equipmentRatesCentavos.clear();
+        equipmentRatesCentavos.put("Speakers(2) + Sound System + Wireless Mics(2 with receiver) - Inside BUCS (PHP 350.00/day)", 35000);
+        equipmentRatesCentavos.put("Speakers(2) + Sound System + Wireless Mics(2 with receiver) - Outside BUCS (PHP 450.00/day)", 45000);
+
+        DefaultComboBoxModel<String> equipModel = new DefaultComboBoxModel<>();
+        equipModel.addElement("-- Select Equipment --");
+        for (String label : equipmentRatesCentavos.keySet()) {
+            equipModel.addElement(label);
+        }
+        jComboBox1.setModel(equipModel);
+
+        List<String> dates = new ArrayList<>();
+        dates.add("-- Select Date --");
+        LocalDate today = LocalDate.now();
+        for (int i = 0; i <= 30; i++) {
+            dates.add(today.plusDays(i).format(DATE_FMT));
+        }
+        jComboBox2.setModel(new DefaultComboBoxModel<>(dates.toArray(new String[0])));
+        jComboBox4.setModel(new DefaultComboBoxModel<>(dates.toArray(new String[0])));
+        jComboBox6.setModel(new DefaultComboBoxModel<>(dates.toArray(new String[0])));
+        jComboBox6.setSelectedIndex(1); // default actual return to today
+
+        List<String> times = new ArrayList<>();
+        times.add("--Time--");
+        for (int h = 8; h <= 20; h++) {
+            times.add(String.format("%02d:00", h));
+        }
+        jComboBox3.setModel(new DefaultComboBoxModel<>(times.toArray(new String[0])));
+        jComboBox5.setModel(new DefaultComboBoxModel<>(times.toArray(new String[0])));
+        jComboBox7.setModel(new DefaultComboBoxModel<>(times.toArray(new String[0])));
+        jComboBox7.setSelectedItem("12:00");
+
+        jComboBox8.setModel(new DefaultComboBoxModel<>(new String[] {
+            "-- Select Condition --", "Good", "Minor Wear", "Damaged"
+        }));
+    }
+
+    private void setupListeners() {
+        btnDashboard.addActionListener(e -> {
+            new DashboardPanel(session).setVisible(true);
+            this.dispose();
+        });
+        btnMerchInventory.addActionListener(e -> {
+            new MerchInventoryPanel(session).setVisible(true);
+            this.dispose();
+        });
+        btnPromos.addActionListener(e -> {
+            new PromosPanel(session).setVisible(true);
+            this.dispose();
+        });
+        btnRentalService.addActionListener(e -> loadPendingCancellations());
+        jButton6.addActionListener(e -> showAccountSettings());
+        jButton2.addActionListener(e -> {
+            new RentalServicePanel2(session).setVisible(true);
+            this.dispose();
+        });
+
+        jComboBox1.addActionListener(e -> updateTotalAmount());
+        jComboBox2.addActionListener(e -> updateTotalAmount());
+        jComboBox3.addActionListener(e -> updateTotalAmount());
+        jComboBox4.addActionListener(e -> updateTotalAmount());
+        jComboBox5.addActionListener(e -> updateTotalAmount());
+
+        jButton3.addActionListener(e -> handleSaveBooking());
+        jButton10.addActionListener(e -> handleRecordReturn());
+
+        jButton7.addActionListener(e -> handleCancellationAction(0, true));
+        jButton4.addActionListener(e -> handleCancellationAction(0, false));
+        jButton8.addActionListener(e -> handleCancellationAction(1, true));
+        jButton9.addActionListener(e -> handleCancellationAction(1, false));
     }
 
     /**
@@ -1069,7 +1297,13 @@ public class RentalServicePanel extends javax.swing.JFrame {
     }// </editor-fold>//GEN-END:initComponents
 
     private void jButton5ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton5ActionPerformed
-        // TODO add your handling code here:
+        int confirm = JOptionPane.showConfirmDialog(
+            this, "Are you sure you want to log out?", "Log Out", JOptionPane.YES_NO_OPTION);
+        if (confirm == JOptionPane.YES_OPTION) {
+            if (session != null) session.endSession();
+            new LoginFrame().setVisible(true);
+            this.dispose();
+        }
     }//GEN-LAST:event_jButton5ActionPerformed
 
     private void btnRenterNameActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnRenterNameActionPerformed
@@ -1143,6 +1377,298 @@ public class RentalServicePanel extends javax.swing.JFrame {
     private void Condition3ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_Condition3ActionPerformed
         // TODO add your handling code here:
     }//GEN-LAST:event_Condition3ActionPerformed
+
+    private int calculateTotalCentavos() {
+        String selectedEquip = (String) jComboBox1.getSelectedItem();
+        if (selectedEquip == null || !equipmentRatesCentavos.containsKey(selectedEquip)) {
+            return 0;
+        }
+        int dailyRate = equipmentRatesCentavos.get(selectedEquip);
+        LocalDateTime start = parseDateTime(jComboBox2, jComboBox3);
+        LocalDateTime end = parseDateTime(jComboBox4, jComboBox5);
+        long days = 1;
+        if (start != null && end != null && end.isAfter(start)) {
+            long between = ChronoUnit.DAYS.between(start.toLocalDate(), end.toLocalDate());
+            days = Math.max(1, between);
+        }
+        return (int) (dailyRate * days);
+    }
+
+    private void updateTotalAmount() {
+        int totalCentavos = calculateTotalCentavos();
+        jLabel6.setText(String.format("Total Amount: PHP %,.2f", totalCentavos / 100.0));
+    }
+
+    private LocalDateTime parseDateTime(JComboBox<String> dateBox, JComboBox<String> timeBox) {
+        Object dObj = dateBox.getSelectedItem();
+        Object tObj = timeBox.getSelectedItem();
+        if (dObj == null || tObj == null) {
+            return null;
+        }
+        String dStr = dObj.toString().trim();
+        String tStr = tObj.toString().trim();
+        if (dStr.startsWith("--") || tStr.startsWith("--") || dStr.isEmpty() || tStr.isEmpty()) {
+            return null;
+        }
+        try {
+            LocalDate date = LocalDate.parse(dStr, DATE_FMT);
+            LocalTime time = LocalTime.parse(tStr, TIME_FMT);
+            return LocalDateTime.of(date, time);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private void handleSaveBooking() {
+        String renterName = txtRenterName.getText().trim();
+        String contactNum = txtContactNum.getText().trim();
+        String venue = txtEventVenue.getText().trim();
+        String selectedEquip = (String) jComboBox1.getSelectedItem();
+
+        if (renterName.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Renter name is required.", "Validation Error", JOptionPane.WARNING_MESSAGE);
+            txtRenterName.requestFocus();
+            return;
+        }
+        if (selectedEquip == null || !equipmentRatesCentavos.containsKey(selectedEquip)) {
+            JOptionPane.showMessageDialog(this, "Please select equipment to rent.", "Validation Error", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        LocalDateTime start = parseDateTime(jComboBox2, jComboBox3);
+        LocalDateTime expectedReturn = parseDateTime(jComboBox4, jComboBox5);
+        if (start == null || expectedReturn == null) {
+            JOptionPane.showMessageDialog(this, "Please select both pick-up and return dates and times.", "Validation Error", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (!expectedReturn.isAfter(start)) {
+            JOptionPane.showMessageDialog(this, "Return date/time must be after pick-up date/time.", "Validation Error", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        String equipName = selectedEquip.contains(" (")
+                ? selectedEquip.substring(0, selectedEquip.indexOf(" ("))
+                : selectedEquip;
+        int totalCentavos = calculateTotalCentavos();
+
+        String[] methods = {"CASH", "GCASH", "BANK_TRANSFER"};
+        JComboBox<String> cmbMethod = new JComboBox<>(methods);
+        JComboBox<String> cmbPaid = new JComboBox<>(new String[]{"Paid Now", "Pay Later (Pending)"});
+        JPanel payPanel = new JPanel(new GridLayout(0, 2, 8, 8));
+        payPanel.add(new JLabel("Total Amount:"));
+        payPanel.add(new JLabel(String.format("PHP %,.2f", totalCentavos / 100.0)));
+        payPanel.add(new JLabel("Payment Method:"));
+        payPanel.add(cmbMethod);
+        payPanel.add(new JLabel("Payment Status:"));
+        payPanel.add(cmbPaid);
+
+        int confirm = JOptionPane.showConfirmDialog(
+                this, payPanel, "Confirm Rental Booking", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (confirm != JOptionPane.OK_OPTION) {
+            return;
+        }
+
+        String paymentMethod = (String) cmbMethod.getSelectedItem();
+        boolean paidNow = cmbPaid.getSelectedIndex() == 0;
+
+        List<RentalItem> items = new ArrayList<>();
+        items.add(new RentalItem(0, 0, 0, equipName, 1, totalCentavos));
+
+        try {
+            int rentalId = rentalService.createRental(
+                    renterName, contactNum, venue, start, expectedReturn, items, paymentMethod, paidNow);
+            JOptionPane.showMessageDialog(this,
+                    String.format("Rental #%d saved!\nRenter: %s\nEquipment: %s\nTotal: PHP %,.2f (%s)",
+                            rentalId, renterName, equipName, totalCentavos / 100.0,
+                            paidNow ? "PAID" : "PENDING"),
+                    "Booking Saved",
+                    JOptionPane.INFORMATION_MESSAGE);
+            clearBookingForm();
+            loadPendingCancellations();
+        } catch (IllegalArgumentException ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Validation Error", JOptionPane.WARNING_MESSAGE);
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Database error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void clearBookingForm() {
+        txtRenterName.setText("");
+        txtContactNum.setText("");
+        txtRenterAddress.setText("");
+        txtEventVenue.setText("");
+        jTextField5.setText("");
+        jComboBox1.setSelectedIndex(0);
+        jComboBox2.setSelectedIndex(0);
+        jComboBox3.setSelectedIndex(0);
+        jComboBox4.setSelectedIndex(0);
+        jComboBox5.setSelectedIndex(0);
+        updateTotalAmount();
+    }
+
+    private void handleRecordReturn() {
+        String idText = txtContactNum1.getText().trim();
+        if (idText.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Please enter a Rental ID.", "Validation Error", JOptionPane.WARNING_MESSAGE);
+            txtContactNum1.requestFocus();
+            return;
+        }
+        int rentalId;
+        try {
+            rentalId = Integer.parseInt(idText.replaceAll("[^0-9]", ""));
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Rental ID must be a valid number.", "Validation Error", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        int lateFeeCentavos = parsePesosToCentavos(txtContactNum3.getText().trim(), "Late Fee");
+        if (lateFeeCentavos < 0) return;
+        int repairFeeCentavos = parsePesosToCentavos(txtContactNum4.getText().trim(), "Repair Fee");
+        if (repairFeeCentavos < 0) return;
+
+        try {
+            Rental rental = rentalService.getRentalById(rentalId);
+            if (rental == null) {
+                JOptionPane.showMessageDialog(this, "Rental #" + rentalId + " was not found.", "Not Found", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            if (rental.getStatus() == RentalStatus.RETURNED) {
+                JOptionPane.showMessageDialog(this, "Rental #" + rentalId + " is already marked as RETURNED.", "Already Returned", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+            if (rental.getStatus() == RentalStatus.CANCELLED) {
+                JOptionPane.showMessageDialog(this, "Rental #" + rentalId + " was CANCELLED and cannot be returned.", "Cancelled", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            if (rental.getStatus() == RentalStatus.RESERVED) {
+                rentalService.startRental(rentalId);
+            }
+            rentalService.returnRental(rentalId);
+
+            int totalExtraFees = lateFeeCentavos + repairFeeCentavos;
+            if (totalExtraFees > 0) {
+                paymentService.recordPayment(rentalId, totalExtraFees, "CASH", true);
+            }
+
+            String condition = (String) jComboBox8.getSelectedItem();
+            String remarks = txtContactNum2.getText().trim();
+            JOptionPane.showMessageDialog(this,
+                    String.format("Rental #%d marked as RETURNED.\nCondition: %s\nExtra Fees Recorded: PHP %,.2f%s",
+                            rentalId,
+                            (condition == null || condition.startsWith("--")) ? "Not specified" : condition,
+                            totalExtraFees / 100.0,
+                            remarks.isEmpty() ? "" : "\nRemarks: " + remarks),
+                    "Return Recorded",
+                    JOptionPane.INFORMATION_MESSAGE);
+
+            txtContactNum1.setText("");
+            txtContactNum2.setText("");
+            txtContactNum3.setText("");
+            txtContactNum4.setText("");
+            jComboBox8.setSelectedIndex(0);
+            loadPendingCancellations();
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Error recording return: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private int parsePesosToCentavos(String text, String fieldName) {
+        if (text == null || text.isEmpty()) {
+            return 0;
+        }
+        try {
+            double pesos = Double.parseDouble(text.replace(",", "").trim());
+            if (pesos < 0) {
+                JOptionPane.showMessageDialog(this, fieldName + " cannot be negative.", "Validation Error", JOptionPane.WARNING_MESSAGE);
+                return -1;
+            }
+            return (int) Math.round(pesos * 100.0);
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, fieldName + " must be a valid number.", "Validation Error", JOptionPane.WARNING_MESSAGE);
+            return -1;
+        }
+    }
+
+    private void loadPendingCancellations() {
+        displayedPendingRentals.clear();
+        try {
+            List<Rental> reserved = rentalService.getRentalsByStatus(RentalStatus.RESERVED);
+            for (int i = 0; i < Math.min(2, reserved.size()); i++) {
+                displayedPendingRentals.add(reserved.get(i));
+            }
+        } catch (SQLException ex) {
+            logger.warning("Could not load reserved rentals: " + ex.getMessage());
+        }
+
+        if (displayedPendingRentals.size() >= 1) {
+            Rental r = displayedPendingRentals.get(0);
+            jPanel10.setVisible(true);
+            lbOrderId4.setText("R-" + r.getRentalId());
+            lbOrderId5.setText(r.getCustomerName());
+            lbOrderId6.setText("RESERVED");
+        } else {
+            jPanel10.setVisible(true);
+            lbOrderId4.setText("-");
+            lbOrderId5.setText("No pending rentals");
+            lbOrderId6.setText("-");
+        }
+
+        if (displayedPendingRentals.size() >= 2) {
+            Rental r = displayedPendingRentals.get(1);
+            jPanel12.setVisible(true);
+            lbOrderId7.setText("R-" + r.getRentalId());
+            lbOrderId8.setText(r.getCustomerName());
+            lbOrderId9.setText("RESERVED");
+        } else {
+            jPanel12.setVisible(false);
+        }
+    }
+
+    private void clearCancellationCards() {
+        displayedPendingRentals.clear();
+        lbOrderId4.setText("-");
+        lbOrderId5.setText("Not connected");
+        lbOrderId6.setText("-");
+        jPanel12.setVisible(false);
+    }
+
+    private void handleCancellationAction(int slotIndex, boolean cancelRental) {
+        if (slotIndex >= displayedPendingRentals.size()) {
+            JOptionPane.showMessageDialog(this, "No reserved rental in this slot.", "Rental Service", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        Rental rental = displayedPendingRentals.get(slotIndex);
+        String actionText = cancelRental
+                ? "Cancel Rental #" + rental.getRentalId() + " (" + rental.getCustomerName() + ")?"
+                : "Start Rental #" + rental.getRentalId() + " (" + rental.getCustomerName() + ") as ONGOING?";
+        int confirm = JOptionPane.showConfirmDialog(this, actionText, "Confirm Action", JOptionPane.YES_NO_OPTION);
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
+        }
+        try {
+            if (cancelRental) {
+                rentalService.cancelRental(rental.getRentalId());
+                JOptionPane.showMessageDialog(this, "Rental #" + rental.getRentalId() + " cancelled.", "Cancelled", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                rentalService.startRental(rental.getRentalId());
+                JOptionPane.showMessageDialog(this, "Rental #" + rental.getRentalId() + " is now ONGOING.", "Started", JOptionPane.INFORMATION_MESSAGE);
+            }
+            loadPendingCancellations();
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Action failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void showAccountSettings() {
+        if (session == null || !session.isLoggedIn()) {
+            JOptionPane.showMessageDialog(this, "Not logged in.", "Settings", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        String info = "User: " + session.getCurrentUser().getFullName()
+                + "\nUsername: " + session.getCurrentUser().getUsername()
+                + "\nRole: " + session.getCurrentUser().getRole().name();
+        JOptionPane.showMessageDialog(this, info, "Account & System Info", JOptionPane.INFORMATION_MESSAGE);
+    }
 
     /**
      * @param args the command line arguments

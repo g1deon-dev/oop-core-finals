@@ -77,10 +77,14 @@ public class PromosPanel extends javax.swing.JFrame {
             new MerchInventoryPanel(session).setVisible(true);
             this.dispose();
         });
-        btnDashboard.addActionListener(e -> javax.swing.JOptionPane.showMessageDialog(
-            this, "Dashboard is not yet implemented.", "Dashboard", javax.swing.JOptionPane.INFORMATION_MESSAGE));
-        btnRentalService.addActionListener(e -> javax.swing.JOptionPane.showMessageDialog(
-            this, "Rental Service is managed by the Rental team (coming soon).", "Rental Service", javax.swing.JOptionPane.INFORMATION_MESSAGE));
+        btnDashboard.addActionListener(e -> {
+            new DashboardPanel(session).setVisible(true);
+            this.dispose();
+        });
+        btnRentalService.addActionListener(e -> {
+            new RentalServicePanel(session).setVisible(true);
+            this.dispose();
+        });
         jButton5.addActionListener(e -> {  // Log Out
             int confirm = javax.swing.JOptionPane.showConfirmDialog(
                 this, "Are you sure you want to log out?", "Log Out", javax.swing.JOptionPane.YES_NO_OPTION);
@@ -195,7 +199,20 @@ public class PromosPanel extends javax.swing.JFrame {
         JPanel navigation = new JPanel();
         navigation.setOpaque(false);
         navigation.setLayout(new javax.swing.BoxLayout(navigation, javax.swing.BoxLayout.Y_AXIS));
-        navigation.setBorder(javax.swing.BorderFactory.createEmptyBorder(158, 14, 0, 14));
+        navigation.setBorder(javax.swing.BorderFactory.createEmptyBorder(24, 14, 0, 14));
+
+        JLabel lblLogo = new JLabel();
+        lblLogo.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
+        lblLogo.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        lblLogo.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, 86));
+        lblLogo.setPreferredSize(new java.awt.Dimension(210, 86));
+        java.net.URL logoUrl = getClass().getResource("/com/mycompany/oop/core/finals/view/logo.png");
+        if (logoUrl != null) {
+            lblLogo.setIcon(new javax.swing.ImageIcon(logoUrl));
+        }
+        navigation.add(lblLogo);
+        navigation.add(javax.swing.Box.createVerticalStrut(48));
+
         addSidebarButton(navigation, btnDashboard);
         addSidebarButton(navigation, btnMerchInventory);
         addSidebarButton(navigation, btnPromos);

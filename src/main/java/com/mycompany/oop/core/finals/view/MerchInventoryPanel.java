@@ -91,12 +91,10 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
         btnAddProduct.addActionListener(e -> handleAddProduct());
         btnEdit.addActionListener(e -> handleEditProduct());
         btnMerchInventory.addActionListener(e -> refreshData());
-        btnRentalService.addActionListener(e -> JOptionPane.showMessageDialog(
-            this,
-            "Rental Service is managed by the Rental team (coming soon).",
-            "Rental Service",
-            JOptionPane.INFORMATION_MESSAGE
-        ));
+        btnRentalService.addActionListener(e -> {
+            new RentalServicePanel(session).setVisible(true);
+            this.dispose();
+        });
 
         setupTableContextMenu();
     }
@@ -1218,12 +1216,8 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
     }//GEN-LAST:event_btnPromosActionPerformed
 
     private void btnDashboardActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnDashboardActionPerformed
-        JOptionPane.showMessageDialog(
-            this,
-            "Dashboard screen is not yet implemented.",
-            "Dashboard",
-            JOptionPane.INFORMATION_MESSAGE
-        );
+        new DashboardPanel(session).setVisible(true);
+        this.dispose();
     }//GEN-LAST:event_btnDashboardActionPerformed
 
     private void btnDeactivateActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnDeactivateActionPerformed

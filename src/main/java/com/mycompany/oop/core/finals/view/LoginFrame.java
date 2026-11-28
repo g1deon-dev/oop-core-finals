@@ -169,10 +169,20 @@ public class LoginFrame extends JFrame {
             mainFrame.setVisible(true);
             this.dispose();
         } catch (IllegalArgumentException ex) {
-            lblError.setText(ex.getMessage());
+            setErrorText(ex.getMessage());
         } catch (Exception ex) {
-            lblError.setText("Login error: " + ex.getMessage());
+            setErrorText("Login error: " + ex.getMessage());
         }
+    }
+
+    private void setErrorText(String message) {
+        if (message == null || message.isBlank()) {
+            lblError.setText(" ");
+            return;
+        }
+        String escaped = message.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+        lblError.setText("<html><div style='width:260px;text-align:center;'>" + escaped + "</div></html>");
+        pack();
     }
 
     /**

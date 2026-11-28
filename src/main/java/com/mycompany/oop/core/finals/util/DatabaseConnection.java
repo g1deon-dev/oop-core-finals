@@ -1,38 +1,50 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package com.mycompany.oop.core.finals.util;
 
-/**
- *
- * @author g1deon-dev
- */
-
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Properties;
 
 public class DatabaseConnection {
 
-    private static final String URL =
-            "jdbc:mysql://127.0.0.1:3306/oop_core_finals";
+    private static String url;
+    private static String username;
+    private static String password;
 
-    public static Connection getConnection()
-            throws SQLException {
+    static {
+        loadConfiguration();
+    }
 
-        String username = System.getenv("OOP_DB_USER");
-        String password = System.getenv("OOP_DB_PASSWORD");
+    private static void loadConfiguration() {
+        Properties props = new Properties();
 
-        if (username == null || password == null) {
+        File propFile = new File("db.properties");
+        if (propFile.exists()) {
+            try (InputStream in = new FileInputStream(propFile)) {
+                props.load(in);
+            } catch (Exception ignored) {
+            }
+        }
+
+        url = props.getProperty("db.url", System.getenv("OOP_DB_URL"));
+        username = props.getProperty("db.user", System.getenv("OOP_DB_USER"));
+        password = props.getProperty("db.password", System.getenv("OOP_DB_PASSWORD"));
+    }
+
+    public static Connection getConnection() throws SQLException {
+        if (url == null || username == null || password == null) {
+            loadConfiguration();
+        }
+
+        if (url == null || username == null || password == null) {
             throw new IllegalStateException(
-                "Database credentials are not configured."
+                "Database credentials are not configured. Please create a 'db.properties' file or set OOP_DB_URL, OOP_DB_USER, OOP_DB_PASSWORD."
             );
         }
 
-        return DriverManager.getConnection(
-                URL, username, password
-        );
+        return DriverManager.getConnection(url, username, password);
     }
 }
-

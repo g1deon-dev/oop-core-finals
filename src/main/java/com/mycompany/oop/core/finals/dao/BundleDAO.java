@@ -240,12 +240,12 @@ public class BundleDAO {
         int bundleId = rs.getInt("bundle_id");
 
         String itemSql = """
-            SELECT bi.bundle_item_id, bi.bundle_id,
+            SELECT bi.bundle_id,
                    bi.product_id, p.product_name, bi.quantity
             FROM bundle_items bi
             JOIN products p ON bi.product_id = p.product_id
             WHERE bi.bundle_id = ?
-            ORDER BY bi.bundle_item_id
+            ORDER BY bi.product_id
             """;
 
         List<BundleItem> items = new ArrayList<>();
@@ -258,7 +258,7 @@ public class BundleDAO {
                 while (itemRs.next()) {
 
                     items.add(new BundleItem(
-                        itemRs.getInt("bundle_item_id"),
+                        0,
                         itemRs.getInt("bundle_id"),
                         itemRs.getInt("product_id"),
                         itemRs.getString("product_name"),

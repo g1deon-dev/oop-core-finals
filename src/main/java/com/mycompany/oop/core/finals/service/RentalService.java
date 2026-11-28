@@ -7,11 +7,8 @@ import com.mycompany.oop.core.finals.model.Rental;
 import com.mycompany.oop.core.finals.model.RentalItem;
 import com.mycompany.oop.core.finals.model.RentalPayment;
 import com.mycompany.oop.core.finals.model.RentalStatus;
-import com.mycompany.oop.core.finals.util.DatabaseConnection;
 
-import java.sql.Connection;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -20,7 +17,6 @@ public class RentalService {
     private final RentalDAO rentalDAO;
     private final RentalItemDAO rentalItemDAO;
     private final RentalPaymentDAO rentalPaymentDAO;
-    private static volatile boolean schemaEnsured = false;
 
     public RentalService() {
         this(new RentalDAO(), new RentalItemDAO(), new RentalPaymentDAO());
@@ -30,52 +26,6 @@ public class RentalService {
         this.rentalDAO = rentalDAO;
         this.rentalItemDAO = rentalItemDAO;
         this.rentalPaymentDAO = rentalPaymentDAO;
-        ensureSchema();
-    }
-
-    private static void ensureSchema() {
-        if (schemaEnsured) {
-            return;
-        }
-        try (Connection conn = DatabaseConnection.getConnection();
-             Statement st = conn.createStatement()) {
-            st.execute("""
-                CREATE TABLE IF NOT EXISTS rentals (
-                    rental_id SERIAL PRIMARY KEY,
-                    customer_name VARCHAR(100) NOT NULL,
-                    contact_number VARCHAR(30) NOT NULL DEFAULT '',
-                    venue VARCHAR(255) NOT NULL DEFAULT '',
-                    rental_start TIMESTAMP NOT NULL,
-                    expected_return TIMESTAMP NOT NULL,
-                    actual_return TIMESTAMP NULL,
-                    status VARCHAR(20) NOT NULL DEFAULT 'RESERVED',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-                """);
-            st.execute("""
-                CREATE TABLE IF NOT EXISTS rental_items (
-                    rental_item_id SERIAL PRIMARY KEY,
-                    rental_id INT NOT NULL REFERENCES rentals(rental_id) ON DELETE CASCADE,
-                    product_id INT NULL REFERENCES products(product_id),
-                    product_name VARCHAR(120) NOT NULL,
-                    quantity INT NOT NULL DEFAULT 1,
-                    rental_price_centavos INT NOT NULL DEFAULT 0
-                )
-                """);
-            st.execute("""
-                CREATE TABLE IF NOT EXISTS rental_payments (
-                    payment_id SERIAL PRIMARY KEY,
-                    rental_id INT NOT NULL REFERENCES rentals(rental_id) ON DELETE CASCADE,
-                    amount_centavos INT NOT NULL,
-                    payment_method VARCHAR(30) NOT NULL DEFAULT 'CASH',
-                    payment_date TIMESTAMP NULL,
-                    payment_status VARCHAR(20) NOT NULL DEFAULT 'PENDING'
-                )
-                """);
-            schemaEnsured = true;
-        } catch (SQLException ignored) {
-            // If offline or DB unreachable, subsequent queries will report the error.
-        }
     }
 
     // ── Database-backed operations ───────────────────────────────────────────
@@ -126,41 +76,29 @@ public class RentalService {
                 expectedReturn
         );
 
-        try (Connection conn = DatabaseConnection.getConnection()) {
-            boolean originalAutoCommit = conn.getAutoCommit();
-            conn.setAutoCommit(false);
-            try {
-                int rentalId = rentalDAO.createRental(conn, rental);
+        int rentalId = rentalDAO.createRental(null, rental);
 
-                for (RentalItem item : items) {
-                    item.setRentalId(rentalId);
-                    rentalItemDAO.addRentalItem(conn, item);
-                }
-
-                if (totalCentavos > 0) {
-                    String method = (paymentMethod == null || paymentMethod.isBlank())
-                            ? "CASH"
-                            : paymentMethod.trim().toUpperCase();
-                    RentalPayment payment = new RentalPayment(
-                            0,
-                            rentalId,
-                            totalCentavos,
-                            method,
-                            paidNow ? LocalDateTime.now() : null,
-                            paidNow ? "PAID" : "PENDING"
-                    );
-                    rentalPaymentDAO.createPayment(conn, payment);
-                }
-
-                conn.commit();
-                return rentalId;
-            } catch (SQLException ex) {
-                conn.rollback();
-                throw ex;
-            } finally {
-                conn.setAutoCommit(originalAutoCommit);
-            }
+        for (RentalItem item : items) {
+            item.setRentalId(rentalId);
+            rentalItemDAO.addRentalItem(null, item);
         }
+
+        if (totalCentavos > 0) {
+            String method = (paymentMethod == null || paymentMethod.isBlank())
+                    ? "CASH"
+                    : paymentMethod.trim().toUpperCase();
+            RentalPayment payment = new RentalPayment(
+                    0,
+                    rentalId,
+                    totalCentavos,
+                    method,
+                    paidNow ? LocalDateTime.now() : null,
+                    paidNow ? "PAID" : "PENDING"
+            );
+            rentalPaymentDAO.createPayment(null, payment);
+        }
+
+        return rentalId;
     }
 
     public List<Rental> getAllRentals() throws SQLException {

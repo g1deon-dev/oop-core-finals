@@ -40,8 +40,7 @@ public class AuthorizationService {
         UserRole role = session.getCurrentUser().getRole();
 
         if (role != UserRole.CHAIRPERSON
-                && role != UserRole.BUSINESS_MANAGER
-                && role != UserRole.COMMITTEE_STAFF) {
+                && role != UserRole.BUSINESS_MANAGER) {
             throw new SecurityException(
                 "You do not have permission to record sales."
             );
@@ -54,8 +53,7 @@ public class AuthorizationService {
         UserRole role = session.getCurrentUser().getRole();
 
         if (role != UserRole.CHAIRPERSON
-                && role != UserRole.BUSINESS_MANAGER
-                && role != UserRole.COMMITTEE_STAFF) {
+                && role != UserRole.BUSINESS_MANAGER) {
             throw new SecurityException(
                 "You do not have permission to view products."
             );

@@ -2,182 +2,115 @@ package com.mycompany.oop.core.finals.dao;
 
 import com.mycompany.oop.core.finals.model.StockChangeRequest;
 import com.mycompany.oop.core.finals.model.StockChangeStatus;
-import com.mycompany.oop.core.finals.util.DatabaseConnection;
+import com.mycompany.oop.core.finals.util.CsvStorage;
 
-import java.sql.*;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class StockChangeRequestDAO {
 
+    private static final String FILE = "stock_change_requests.csv";
+    private static final String[] HEADERS = {
+        "request_id", "product_id", "requested_quantity", "reason", "status",
+        "requested_by", "reviewed_by", "review_notes", "created_at", "reviewed_at"
+    };
+
     public int createRequest(StockChangeRequest request) throws SQLException {
-        String sql = """
-            INSERT INTO stock_change_requests (product_id, requested_quantity, reason, status, requested_by)
-            VALUES (?, ?, ?, ?, ?)
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-
-            stmt.setInt(1, request.getProductId());
-            stmt.setInt(2, request.getRequestedQuantity());
-            stmt.setString(3, request.getReason());
-            stmt.setString(4, request.getStatus().name());
-            stmt.setInt(5, request.getRequestedBy());
-
-            stmt.executeUpdate();
-
-            try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
-                if (generatedKeys.next()) {
-                    return generatedKeys.getInt(1);
-                } else {
-                    throw new SQLException("Creating stock change request failed, no ID obtained.");
-                }
-            }
-        }
+        List<String[]> rows = CsvStorage.readAllRows(FILE, HEADERS);
+        int id = CsvStorage.nextIntId(rows, 0);
+        LocalDateTime now = LocalDateTime.now();
+        rows.add(new String[]{
+            String.valueOf(id),
+            String.valueOf(request.getProductId()),
+            String.valueOf(request.getRequestedQuantity()),
+            CsvStorage.str(request.getReason()),
+            request.getStatus().name(),
+            String.valueOf(request.getRequestedBy()),
+            "",
+            "",
+            now.toString(),
+            ""
+        });
+        CsvStorage.writeAllRows(FILE, HEADERS, rows);
+        return id;
     }
 
     public StockChangeRequest getRequestById(int requestId) throws SQLException {
-        String sql = """
-            SELECT request_id, product_id, requested_quantity, reason, status,
-                   requested_by, reviewed_by, review_notes, created_at, reviewed_at
-            FROM stock_change_requests
-            WHERE request_id = ?
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setInt(1, requestId);
-
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return mapResultSetToRequest(rs);
-                }
+        for (StockChangeRequest r : getAllRequests()) {
+            if (r.getRequestId() == requestId) {
+                return r;
             }
         }
-
         return null;
     }
 
     public List<StockChangeRequest> getAllRequests() throws SQLException {
         List<StockChangeRequest> requests = new ArrayList<>();
-
-        String sql = """
-            SELECT request_id, product_id, requested_quantity, reason, status,
-                   requested_by, reviewed_by, review_notes, created_at, reviewed_at
-            FROM stock_change_requests
-            ORDER BY created_at DESC, request_id DESC
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-
-            while (rs.next()) {
-                requests.add(mapResultSetToRequest(rs));
-            }
+        for (String[] r : CsvStorage.readAllRows(FILE, HEADERS)) {
+            requests.add(new StockChangeRequest(
+                Integer.parseInt(r[0]),
+                Integer.parseInt(r[1]),
+                Integer.parseInt(r[2]),
+                r[3],
+                StockChangeStatus.valueOf(r[4]),
+                Integer.parseInt(r[5]),
+                CsvStorage.parseNullableInt(r[6]),
+                r[7].isEmpty() ? null : r[7],
+                CsvStorage.parseNullableDateTime(r[8]),
+                CsvStorage.parseNullableDateTime(r[9])
+            ));
         }
-
+        Collections.reverse(requests);
         return requests;
     }
 
     public List<StockChangeRequest> getRequestsByStatus(StockChangeStatus status) throws SQLException {
         List<StockChangeRequest> requests = new ArrayList<>();
-
-        String sql = """
-            SELECT request_id, product_id, requested_quantity, reason, status,
-                   requested_by, reviewed_by, review_notes, created_at, reviewed_at
-            FROM stock_change_requests
-            WHERE status = ?
-            ORDER BY created_at DESC, request_id DESC
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setString(1, status.name());
-
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    requests.add(mapResultSetToRequest(rs));
-                }
+        for (StockChangeRequest r : getAllRequests()) {
+            if (r.getStatus() == status) {
+                requests.add(r);
             }
         }
-
         return requests;
     }
 
     public void updateStatus(int requestId, StockChangeStatus newStatus, int reviewedBy, String reviewNotes) throws SQLException {
-        String sql = """
-            UPDATE stock_change_requests
-            SET status = ?,
-                reviewed_by = ?,
-                review_notes = ?,
-                reviewed_at = CURRENT_TIMESTAMP
-            WHERE request_id = ?
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setString(1, newStatus.name());
-            stmt.setInt(2, reviewedBy);
-            stmt.setString(3, reviewNotes);
-            stmt.setInt(4, requestId);
-
-            int rowsUpdated = stmt.executeUpdate();
-            if (rowsUpdated == 0) {
-                throw new SQLException("Stock change request not found: " + requestId);
+        List<String[]> rows = CsvStorage.readAllRows(FILE, HEADERS);
+        boolean found = false;
+        for (String[] r : rows) {
+            if (Integer.parseInt(r[0]) == requestId) {
+                r[4] = newStatus.name();
+                r[6] = String.valueOf(reviewedBy);
+                r[7] = CsvStorage.str(reviewNotes);
+                r[9] = LocalDateTime.now().toString();
+                found = true;
+                break;
             }
         }
+        if (!found) {
+            throw new SQLException("Stock change request not found: " + requestId);
+        }
+        CsvStorage.writeAllRows(FILE, HEADERS, rows);
     }
 
     public void cancelRequest(int requestId, int userId) throws SQLException {
-        String sql = """
-            UPDATE stock_change_requests
-            SET status = 'CANCELLED'
-            WHERE request_id = ? AND requested_by = ? AND status = 'PENDING'
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setInt(1, requestId);
-            stmt.setInt(2, userId);
-
-            int rowsUpdated = stmt.executeUpdate();
-            if (rowsUpdated == 0) {
-                throw new SQLException("Request could not be cancelled. It may not exist, belong to another user, or is no longer PENDING.");
+        List<String[]> rows = CsvStorage.readAllRows(FILE, HEADERS);
+        boolean updated = false;
+        for (String[] r : rows) {
+            if (Integer.parseInt(r[0]) == requestId
+                    && Integer.parseInt(r[5]) == userId
+                    && "PENDING".equals(r[4])) {
+                r[4] = StockChangeStatus.CANCELLED.name();
+                updated = true;
+                break;
             }
         }
-    }
-
-    private StockChangeRequest mapResultSetToRequest(ResultSet rs) throws SQLException {
-        int requestId = rs.getInt("request_id");
-        int productId = rs.getInt("product_id");
-        int requestedQuantity = rs.getInt("requested_quantity");
-        String reason = rs.getString("reason");
-        StockChangeStatus status = StockChangeStatus.valueOf(rs.getString("status"));
-        int requestedBy = rs.getInt("requested_by");
-
-        Integer reviewedBy = rs.getInt("reviewed_by");
-        if (rs.wasNull()) {
-            reviewedBy = null;
+        if (!updated) {
+            throw new SQLException("Request could not be cancelled. It may not exist, belong to another user, or is no longer PENDING.");
         }
-
-        String reviewNotes = rs.getString("review_notes");
-
-        Timestamp createdTs = rs.getTimestamp("created_at");
-        LocalDateTime createdAt = createdTs != null ? createdTs.toLocalDateTime() : null;
-
-        Timestamp reviewedTs = rs.getTimestamp("reviewed_at");
-        LocalDateTime reviewedAt = reviewedTs != null ? reviewedTs.toLocalDateTime() : null;
-
-        return new StockChangeRequest(
-            requestId, productId, requestedQuantity, reason, status,
-            requestedBy, reviewedBy, reviewNotes, createdAt, reviewedAt
-        );
+        CsvStorage.writeAllRows(FILE, HEADERS, rows);
     }
 }

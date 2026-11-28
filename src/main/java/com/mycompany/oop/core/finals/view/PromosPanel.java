@@ -7,7 +7,9 @@ package com.mycompany.oop.core.finals.view;
 import com.mycompany.oop.core.finals.model.Bundle;
 import com.mycompany.oop.core.finals.model.BundleItem;
 import com.mycompany.oop.core.finals.model.PreOrder;
+import com.mycompany.oop.core.finals.model.PreOrderStatus;
 import com.mycompany.oop.core.finals.model.Product;
+import com.mycompany.oop.core.finals.model.SaleItem;
 import com.mycompany.oop.core.finals.model.UserRole;
 import com.mycompany.oop.core.finals.security.AuthorizationService;
 import com.mycompany.oop.core.finals.security.UserSession;
@@ -15,6 +17,7 @@ import com.mycompany.oop.core.finals.service.BundleService;
 import com.mycompany.oop.core.finals.service.AuthService;
 import com.mycompany.oop.core.finals.service.PreOrderService;
 import com.mycompany.oop.core.finals.service.ProductService;
+import com.mycompany.oop.core.finals.service.SalesService;
 
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
@@ -40,7 +43,10 @@ public class PromosPanel extends javax.swing.JFrame {
     private BundleService bundleService;
     private PreOrderService preOrderService;
     private ProductService productService;
+    private SalesService salesService;
     private List<Bundle> loadedBundles = new ArrayList<>();
+    private final javax.swing.JButton btnManageBundles = new javax.swing.JButton("MANAGE / EDIT BUNDLES");
+    private final javax.swing.JButton btnManageOrders = new javax.swing.JButton("MANAGE PRE-ORDERS");
 
     /**
      * Creates new form PromosPanel
@@ -67,13 +73,12 @@ public class PromosPanel extends javax.swing.JFrame {
         this.bundleService = new BundleService(authService);
         this.preOrderService = new PreOrderService(authService, session);
         this.productService = new ProductService(authService);
+        this.salesService = new SalesService(authService, session);
         jLabel1.setText(session.getCurrentUser().getRole().name());
         jLabel2.setText(session.getCurrentUser().getFullName());
 
-        UserRole role = session.getCurrentUser().getRole();
-        boolean isAdmin = role == UserRole.CHAIRPERSON || role == UserRole.BUSINESS_MANAGER;
-        btnAddBundle.setEnabled(isAdmin);
-        btnAddBundleSymbol.setEnabled(isAdmin);
+        btnAddBundle.setEnabled(true);
+        btnAddBundleSymbol.setEnabled(true);
 
         loadPromosData();
     }
@@ -103,6 +108,8 @@ public class PromosPanel extends javax.swing.JFrame {
         btnAddBundleSymbol.addActionListener(e -> handleCreateBundle());
         btnBundle1.addActionListener(e -> showBundleDetails(0));
         btnBundle3.addActionListener(e -> showBundleDetails(2));
+        btnManageBundles.addActionListener(e -> handleManageBundles());
+        btnManageOrders.addActionListener(e -> handleManagePreOrders());
     }
 
     /**
@@ -269,8 +276,60 @@ public class PromosPanel extends javax.swing.JFrame {
         jPanel1.setPreferredSize(new java.awt.Dimension(1035, 800));
         btnAddBundleSymbol.setMargin(new java.awt.Insets(0, 0, 0, 0));
 
+        // Add Manage Bundles button to jPanel5 header
+        btnManageBundles.setBackground(new java.awt.Color(191, 205, 221));
+        btnManageBundles.setFont(new java.awt.Font("Segoe UI Historic", java.awt.Font.BOLD, 12));
+        btnManageBundles.setForeground(new java.awt.Color(9, 30, 57));
+        btnManageBundles.setFocusPainted(false);
+        btnManageBundles.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+        javax.swing.GroupLayout bundlePanelLayout = new javax.swing.GroupLayout(jPanel5);
+        jPanel5.setLayout(bundlePanelLayout);
+        bundlePanelLayout.setHorizontalGroup(
+            bundlePanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, bundlePanelLayout.createSequentialGroup()
+                .addContainerGap(31, Short.MAX_VALUE)
+                .addComponent(jPanel9, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(18, 18, 18)
+                .addComponent(jPanel8, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(18, 18, 18)
+                .addComponent(jPanel10, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(21, 21, 21))
+            .addGroup(bundlePanelLayout.createSequentialGroup()
+                .addGap(17, 17, 17)
+                .addComponent(jLabel3, javax.swing.GroupLayout.PREFERRED_SIZE, 319, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(btnManageBundles, javax.swing.GroupLayout.PREFERRED_SIZE, 195, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(21, 21, 21))
+        );
+        bundlePanelLayout.setVerticalGroup(
+            bundlePanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, bundlePanelLayout.createSequentialGroup()
+                .addContainerGap()
+                .addGroup(bundlePanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.CENTER)
+                    .addComponent(jLabel3, javax.swing.GroupLayout.DEFAULT_SIZE, 44, Short.MAX_VALUE)
+                    .addComponent(btnManageBundles, javax.swing.GroupLayout.PREFERRED_SIZE, 30, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addGroup(bundlePanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
+                    .addComponent(jPanel10, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(jPanel8, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(jPanel9, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addGap(15, 15, 15))
+        );
+
+        // Place ADD NEW ORDER and MANAGE PRE-ORDERS side-by-side in jPanel16
+        jButton1.setFont(new java.awt.Font("Segoe UI Historic", java.awt.Font.BOLD, 18));
+        btnManageOrders.setBackground(new java.awt.Color(9, 30, 57));
+        btnManageOrders.setFont(new java.awt.Font("Segoe UI Historic", java.awt.Font.BOLD, 16));
+        btnManageOrders.setForeground(new java.awt.Color(245, 245, 245));
+        btnManageOrders.setFocusPainted(false);
+        jPanel16.removeAll();
+        jPanel16.setLayout(new GridLayout(1, 2, 12, 0));
+        jPanel16.setBorder(javax.swing.BorderFactory.createEmptyBorder(16, 18, 16, 18));
+        jPanel16.add(jButton1);
+        jPanel16.add(btnManageOrders);
+
         javax.swing.JButton[] actionBtns = {
-            btnAddBundle, btnAddBundleSymbol, btnAddBundle1, jButton1, btnBundle1, btnBundle2, btnBundle3
+            btnAddBundle, btnAddBundleSymbol, btnAddBundle1, jButton1, btnManageOrders, btnManageBundles, btnBundle1, btnBundle2, btnBundle3
         };
         for (javax.swing.JButton b : actionBtns) {
             b.setFocusPainted(false);
@@ -333,7 +392,7 @@ public class PromosPanel extends javax.swing.JFrame {
         JTextField usernameField = new JTextField();
         JTextField fullNameField = new JTextField();
         JPasswordField passwordField = new JPasswordField();
-        JComboBox<UserRole> roleBox = new JComboBox<>(UserRole.values());
+        JComboBox<UserRole> roleBox = new JComboBox<>(new UserRole[]{UserRole.CHAIRPERSON, UserRole.BUSINESS_MANAGER});
         JPanel form = new JPanel(new GridLayout(0, 2, 8, 8));
         form.add(new JLabel("Username:"));
         form.add(usernameField);
@@ -435,32 +494,401 @@ public class PromosPanel extends javax.swing.JFrame {
         if (index < 0 || index >= loadedBundles.size()) {
             return;
         }
-        Bundle b = loadedBundles.get(index);
+        try {
+            Bundle b = bundleService.getBundleById(loadedBundles.get(index).getBundleId());
+            if (b == null) {
+                JOptionPane.showMessageDialog(this, "Bundle not found.", "Promos", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            showBundleDetailsDialog(b);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Promos", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void showBundleDetailsDialog(Bundle b) {
         StringBuilder details = new StringBuilder();
-        details.append("Bundle: ").append(b.getBundleName()).append("\n");
+        details.append("Bundle #").append(b.getBundleId()).append(": ").append(b.getBundleName()).append("\n");
         details.append(String.format("Price: PHP %,.2f\n\nItems:\n", b.getPriceCentavos() / 100.0));
         b.getItems().forEach(item ->
             details.append(" - ").append(item.getProductName()).append(" x").append(item.getQuantity()).append("\n")
         );
 
-        UserRole role = session != null && session.isLoggedIn() ? session.getCurrentUser().getRole() : null;
-        boolean isAdmin = role == UserRole.CHAIRPERSON || role == UserRole.BUSINESS_MANAGER;
-        if (isAdmin) {
-            Object[] options = {"Close", "Deactivate Bundle"};
-            int choice = JOptionPane.showOptionDialog(this, details.toString(), "Bundle Details",
-                JOptionPane.YES_NO_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
-            if (choice == 1) {
-                try {
-                    bundleService.deactivateBundle(b.getBundleId());
-                    loadPromosData();
-                    JOptionPane.showMessageDialog(this, "Bundle deactivated.", "Promos", JOptionPane.INFORMATION_MESSAGE);
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(this, ex.getMessage(), "Promos", JOptionPane.ERROR_MESSAGE);
+        Object[] options = {"Close", "Edit Bundle", "Deactivate Bundle"};
+        int choice = JOptionPane.showOptionDialog(this, details.toString(), "Bundle Details",
+            JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
+        if (choice == 1) {
+            handleEditBundle(b);
+        } else if (choice == 2) {
+            try {
+                bundleService.deactivateBundle(b.getBundleId());
+                loadPromosData();
+                JOptionPane.showMessageDialog(this, "Bundle deactivated.", "Promos", JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, ex.getMessage(), "Promos", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    private void handleEditBundle(Bundle existing) {
+        if (session == null || !session.isLoggedIn() || bundleService == null || productService == null) {
+            return;
+        }
+        try {
+            List<Product> products = productService.getAllProducts();
+            if (products.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "No active products available.", "Edit Bundle", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            java.util.Map<Integer, Integer> existingQty = new java.util.HashMap<>();
+            for (BundleItem bi : existing.getItems()) {
+                existingQty.put(bi.getProductId(), bi.getQuantity());
+            }
+
+            JTextField nameField = new JTextField(existing.getBundleName());
+            JTextField priceField = new JTextField(String.format("%.2f", existing.getPriceCentavos() / 100.0));
+
+            javax.swing.table.DefaultTableModel model = new javax.swing.table.DefaultTableModel(
+                new String[]{"Include", "ID", "Product Name", "Stock", "Bundle Qty"}, 0
+            ) {
+                @Override
+                public Class<?> getColumnClass(int columnIndex) {
+                    return switch (columnIndex) {
+                        case 0 -> Boolean.class;
+                        case 1, 3, 4 -> Integer.class;
+                        default -> String.class;
+                    };
+                }
+
+                @Override
+                public boolean isCellEditable(int row, int column) {
+                    return column == 0 || column == 4;
+                }
+            };
+
+            for (Product p : products) {
+                Integer q = existingQty.get(p.getProductId());
+                model.addRow(new Object[]{q != null, p.getProductId(), p.getProductName(), p.getQuantity(), q != null ? q : 1});
+            }
+
+            javax.swing.JTable itemTable = new javax.swing.JTable(model);
+            itemTable.setRowHeight(24);
+            itemTable.getColumnModel().getColumn(0).setMaxWidth(60);
+            itemTable.getColumnModel().getColumn(1).setMaxWidth(50);
+            itemTable.getColumnModel().getColumn(3).setMaxWidth(65);
+            itemTable.getColumnModel().getColumn(4).setMaxWidth(85);
+
+            javax.swing.JScrollPane tableScroll = new javax.swing.JScrollPane(itemTable);
+            tableScroll.setPreferredSize(new java.awt.Dimension(460, 180));
+
+            JPanel topFields = new JPanel(new GridLayout(0, 2, 8, 8));
+            topFields.add(new JLabel("Bundle Name:"));
+            topFields.add(nameField);
+            topFields.add(new JLabel("Bundle Price (PHP):"));
+            topFields.add(priceField);
+
+            JPanel container = new JPanel(new java.awt.BorderLayout(0, 10));
+            container.add(topFields, java.awt.BorderLayout.NORTH);
+            container.add(new JLabel("Update products & quantities:"), java.awt.BorderLayout.CENTER);
+            container.add(tableScroll, java.awt.BorderLayout.SOUTH);
+
+            int result = JOptionPane.showConfirmDialog(
+                this, container, "Edit Bundle #" + existing.getBundleId(), JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE
+            );
+            if (result != JOptionPane.OK_OPTION) {
+                return;
+            }
+            if (itemTable.isEditing()) {
+                itemTable.getCellEditor().stopCellEditing();
+            }
+
+            long priceCentavos = Math.round(Double.parseDouble(priceField.getText().trim()) * 100);
+            List<BundleItem> items = new ArrayList<>();
+            for (int r = 0; r < model.getRowCount(); r++) {
+                if (Boolean.TRUE.equals(model.getValueAt(r, 0))) {
+                    Object qtyObj = model.getValueAt(r, 4);
+                    int qty = qtyObj instanceof Number ? ((Number) qtyObj).intValue() : Integer.parseInt(qtyObj.toString().trim());
+                    if (qty <= 0) {
+                        JOptionPane.showMessageDialog(this, "Bundle quantity must be > 0.", "Edit Bundle", JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+                    Product p = products.get(r);
+                    items.add(new BundleItem(p.getProductId(), p.getProductName(), qty));
                 }
             }
-        } else {
-            JOptionPane.showMessageDialog(this, details.toString(), "Bundle Details", JOptionPane.INFORMATION_MESSAGE);
+            if (items.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Select at least one product.", "Edit Bundle", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            bundleService.updateBundle(new Bundle(existing.getBundleId(), nameField.getText(), priceCentavos, existing.isActive(), items));
+            loadPromosData();
+            JOptionPane.showMessageDialog(this, "Bundle updated successfully!", "Promos", JOptionPane.INFORMATION_MESSAGE);
+        } catch (NumberFormatException nfe) {
+            JOptionPane.showMessageDialog(this, "Enter valid numbers for price and quantities.", "Edit Bundle", JOptionPane.ERROR_MESSAGE);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Edit Bundle", JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    private void handleManageBundles() {
+        if (session == null || !session.isLoggedIn() || bundleService == null) {
+            return;
+        }
+
+        javax.swing.JDialog dialog = new javax.swing.JDialog(this, "All Active Bundles", true);
+        dialog.setLayout(new java.awt.BorderLayout(8, 8));
+
+        javax.swing.table.DefaultTableModel model = new javax.swing.table.DefaultTableModel(
+            new String[]{"ID", "Bundle Name", "Price (PHP)", "Items"}, 0
+        ) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        javax.swing.JTable table = new javax.swing.JTable(model);
+        table.setRowHeight(24);
+        table.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+
+        Runnable reload = () -> {
+            model.setRowCount(0);
+            try {
+                loadedBundles = bundleService.getAllBundles();
+                for (Bundle b : loadedBundles) {
+                    String summary = b.getItems().stream()
+                        .map(i -> i.getProductName() + " x" + i.getQuantity())
+                        .reduce((a, c) -> a + ", " + c).orElse("-");
+                    model.addRow(new Object[]{
+                        b.getBundleId(),
+                        b.getBundleName(),
+                        String.format("PHP %,.2f", b.getPriceCentavos() / 100.0),
+                        summary
+                    });
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, ex.getMessage(), "Bundles", JOptionPane.ERROR_MESSAGE);
+            }
+        };
+        reload.run();
+
+        javax.swing.JButton btnEdit = new javax.swing.JButton("Edit");
+        javax.swing.JButton btnDeactivate = new javax.swing.JButton("Deactivate");
+        javax.swing.JButton btnReactivate = new javax.swing.JButton("Reactivate by ID");
+        javax.swing.JButton btnClose = new javax.swing.JButton("Close");
+
+        btnEdit.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row < 0) return;
+            int id = ((Number) model.getValueAt(row, 0)).intValue();
+            try {
+                Bundle b = bundleService.getBundleById(id);
+                if (b != null) {
+                    handleEditBundle(b);
+                    reload.run();
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, ex.getMessage(), "Bundles", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        btnDeactivate.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row < 0) return;
+            int id = ((Number) model.getValueAt(row, 0)).intValue();
+            try {
+                bundleService.deactivateBundle(id);
+                reload.run();
+                loadPromosData();
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, ex.getMessage(), "Bundles", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        btnReactivate.addActionListener(e -> {
+            String input = JOptionPane.showInputDialog(dialog, "Enter Bundle ID to reactivate:");
+            if (input == null || input.isBlank()) return;
+            try {
+                int id = Integer.parseInt(input.trim());
+                bundleService.reactivateBundle(id);
+                reload.run();
+                loadPromosData();
+                JOptionPane.showMessageDialog(dialog, "Bundle #" + id + " reactivated.");
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, ex.getMessage(), "Bundles", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        btnClose.addActionListener(e -> dialog.dispose());
+
+        JPanel btnBar = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT));
+        btnBar.add(btnEdit);
+        btnBar.add(btnDeactivate);
+        btnBar.add(btnReactivate);
+        btnBar.add(btnClose);
+
+        javax.swing.JScrollPane scroll = new javax.swing.JScrollPane(table);
+        scroll.setPreferredSize(new java.awt.Dimension(640, 260));
+        dialog.add(scroll, java.awt.BorderLayout.CENTER);
+        dialog.add(btnBar, java.awt.BorderLayout.SOUTH);
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
+    }
+
+    private void handleManagePreOrders() {
+        if (session == null || !session.isLoggedIn() || preOrderService == null) {
+            return;
+        }
+
+        javax.swing.JDialog dialog = new javax.swing.JDialog(this, "Manage Pre-Orders", true);
+        dialog.setLayout(new java.awt.BorderLayout(8, 8));
+
+        JComboBox<String> filterBox = new JComboBox<>(new String[]{"ALL", "PENDING", "READY", "FULFILLED", "CANCELLED"});
+        javax.swing.table.DefaultTableModel model = new javax.swing.table.DefaultTableModel(
+            new String[]{"Order ID", "Customer", "Contact", "Target", "Qty", "Total (PHP)", "Status", "Notes"}, 0
+        ) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        javax.swing.JTable table = new javax.swing.JTable(model);
+        table.setRowHeight(24);
+        table.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+
+        Runnable reload = () -> {
+            model.setRowCount(0);
+            try {
+                List<PreOrder> orders = switch (filterBox.getSelectedIndex()) {
+                    case 1 -> preOrderService.getPendingOrders();
+                    case 2 -> preOrderService.getReadyOrders();
+                    case 3 -> preOrderService.getOrdersByStatus(PreOrderStatus.FULFILLED);
+                    case 4 -> preOrderService.getOrdersByStatus(PreOrderStatus.CANCELLED);
+                    default -> preOrderService.getAllOrders();
+                };
+                for (PreOrder o : orders) {
+                    model.addRow(new Object[]{
+                        o.getOrderId(),
+                        o.getCustomerName(),
+                        o.getContactNumber(),
+                        o.getBundleId() != null ? "Bundle #" + o.getBundleId() : "Prod #" + o.getProductId(),
+                        o.getQuantity(),
+                        String.format("PHP %,.2f", o.getTotalCentavos() / 100.0),
+                        o.getStatus().name(),
+                        o.getNotes()
+                    });
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, ex.getMessage(), "Pre-Orders", JOptionPane.ERROR_MESSAGE);
+            }
+        };
+        filterBox.addActionListener(e -> reload.run());
+        reload.run();
+
+        JPanel topBar = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
+        topBar.add(new JLabel("Status Filter:"));
+        topBar.add(filterBox);
+
+        javax.swing.JButton btnDetails = new javax.swing.JButton("View Details");
+        javax.swing.JButton btnReady = new javax.swing.JButton("Mark Ready");
+        javax.swing.JButton btnFulfill = new javax.swing.JButton("Fulfill Order");
+        javax.swing.JButton btnCancel = new javax.swing.JButton("Cancel Order");
+        javax.swing.JButton btnClose = new javax.swing.JButton("Close");
+
+        btnDetails.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row < 0) return;
+            int id = ((Number) model.getValueAt(row, 0)).intValue();
+            try {
+                PreOrder o = preOrderService.getOrderById(id);
+                String msg = "Order: PO-" + o.getOrderId()
+                    + "\nCustomer: " + o.getCustomerName()
+                    + "\nContact: " + o.getContactNumber()
+                    + "\nItem: " + (o.getBundleId() != null ? "Bundle #" + o.getBundleId() : "Product #" + o.getProductId())
+                    + "\nQuantity: " + o.getQuantity()
+                    + String.format("\nTotal: PHP %,.2f", o.getTotalCentavos() / 100.0)
+                    + "\nStatus: " + o.getStatus()
+                    + "\nNotes: " + o.getNotes();
+                JOptionPane.showMessageDialog(dialog, msg, "Pre-Order Details", JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, ex.getMessage(), "Pre-Orders", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        btnReady.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row < 0) return;
+            int id = ((Number) model.getValueAt(row, 0)).intValue();
+            try {
+                preOrderService.markReady(id);
+                reload.run();
+                loadPromosData();
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, ex.getMessage(), "Pre-Orders", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        btnFulfill.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row < 0) return;
+            int id = ((Number) model.getValueAt(row, 0)).intValue();
+            try {
+                PreOrder o = preOrderService.getOrderById(id);
+                int deduct = JOptionPane.showConfirmDialog(
+                    dialog,
+                    "Record this pre-order as a completed sale and deduct inventory stock?",
+                    "Fulfill PO-" + id,
+                    JOptionPane.YES_NO_CANCEL_OPTION
+                );
+                if (deduct == JOptionPane.CANCEL_OPTION) return;
+                if (deduct == JOptionPane.YES_OPTION && salesService != null) {
+                    long unitPrice = o.getQuantity() > 0 ? (o.getTotalCentavos() / o.getQuantity()) : o.getTotalCentavos();
+                    SaleItem si = o.getBundleId() != null
+                        ? SaleItem.forBundle(o.getBundleId(), "Bundle #" + o.getBundleId(), unitPrice, o.getQuantity(), o.getTotalCentavos())
+                        : new SaleItem(o.getProductId(), "Product #" + o.getProductId(), unitPrice, o.getQuantity(), o.getTotalCentavos());
+                    salesService.recordSale(java.util.List.of(si));
+                }
+                preOrderService.fulfillOrder(id);
+                reload.run();
+                loadPromosData();
+                JOptionPane.showMessageDialog(dialog, "Pre-order PO-" + id + " fulfilled!");
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, ex.getMessage(), "Pre-Orders", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        btnCancel.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row < 0) return;
+            int id = ((Number) model.getValueAt(row, 0)).intValue();
+            try {
+                preOrderService.cancelOrder(id);
+                reload.run();
+                loadPromosData();
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, ex.getMessage(), "Pre-Orders", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        btnClose.addActionListener(e -> dialog.dispose());
+
+        JPanel btnBar = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT));
+        btnBar.add(btnDetails);
+        btnBar.add(btnReady);
+        btnBar.add(btnFulfill);
+        btnBar.add(btnCancel);
+        btnBar.add(btnClose);
+
+        javax.swing.JScrollPane scroll = new javax.swing.JScrollPane(table);
+        scroll.setPreferredSize(new java.awt.Dimension(780, 320));
+        dialog.add(topBar, java.awt.BorderLayout.NORTH);
+        dialog.add(scroll, java.awt.BorderLayout.CENTER);
+        dialog.add(btnBar, java.awt.BorderLayout.SOUTH);
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
     }
 
     private void handleCreateBundle() {

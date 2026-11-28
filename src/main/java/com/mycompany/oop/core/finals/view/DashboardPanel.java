@@ -1,15 +1,19 @@
 package com.mycompany.oop.core.finals.view;
 
+import com.mycompany.oop.core.finals.model.Bundle;
 import com.mycompany.oop.core.finals.model.Product;
 import com.mycompany.oop.core.finals.model.Rental;
 import com.mycompany.oop.core.finals.model.RentalStatus;
 import com.mycompany.oop.core.finals.model.Sale;
+import com.mycompany.oop.core.finals.model.SaleItem;
 import com.mycompany.oop.core.finals.model.StockMovement;
 import com.mycompany.oop.core.finals.model.StockStatus;
+import com.mycompany.oop.core.finals.model.User;
 import com.mycompany.oop.core.finals.model.UserRole;
 import com.mycompany.oop.core.finals.security.AuthorizationService;
 import com.mycompany.oop.core.finals.security.UserSession;
 import com.mycompany.oop.core.finals.service.AuthService;
+import com.mycompany.oop.core.finals.service.BundleService;
 import com.mycompany.oop.core.finals.service.InventoryService;
 import com.mycompany.oop.core.finals.service.ProductService;
 import com.mycompany.oop.core.finals.service.RentalService;
@@ -65,6 +69,7 @@ public class DashboardPanel extends javax.swing.JFrame {
     private ProductService productService;
     private InventoryService inventoryService;
     private SalesService salesService;
+    private BundleService bundleService;
     private final RentalService rentalService = new RentalService();
 
     private final JButton btnPromosNav = new JButton("PROMOS");
@@ -102,6 +107,7 @@ public class DashboardPanel extends javax.swing.JFrame {
         this.productService = new ProductService(authService);
         this.inventoryService = new InventoryService(authService, session);
         this.salesService = new SalesService(authService, session);
+        this.bundleService = new BundleService(authService);
 
         String fullName = session.getCurrentUser().getFullName();
         jLabel2.setText("Welcome back, " + fullName + "!");
@@ -419,27 +425,83 @@ public class DashboardPanel extends javax.swing.JFrame {
         jPanel9.setLayout(new GridLayout(6, 7, 4, 4));
         jPanel9.setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
-        // 3. Make Recent Activities / Selected Date & Stock Status (jPanel8) scrollable
+        // 3. Make Recent Activities / Selected Date & Stock Status (jPanel8) scrollable with styled renderer
         jPanel8.removeAll();
         jPanel8.setLayout(new BorderLayout(0, 8));
         jPanel8.setBorder(BorderFactory.createEmptyBorder(14, 18, 14, 18));
 
-        jLabel8.setText("Date Schedule & Stock Status");
+        jLabel8.setText("Schedule & Recent Activity");
         jLabel8.setFont(new Font("Segoe UI Historic", Font.BOLD, 18));
         jLabel8.setForeground(headerNavy);
         jPanel8.add(jLabel8, BorderLayout.NORTH);
 
         activityListModel = new DefaultListModel<>();
         JList<String> activityList = new JList<>(activityListModel);
-        activityList.setBackground(textLight);
-        activityList.setForeground(subTitleBlue);
-        activityList.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        activityList.setFixedCellHeight(26);
+        activityList.setBackground(Color.WHITE);
+        activityList.setForeground(darkText);
+        activityList.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        activityList.setFixedCellHeight(28);
+        activityList.setCellRenderer(new javax.swing.DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                                                          boolean isSelected, boolean cellHasFocus) {
+                JLabel lbl = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                String text = value == null ? "" : value.toString();
+                lbl.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(238, 241, 246)),
+                    BorderFactory.createEmptyBorder(4, 10, 4, 10)
+                ));
+                if (!isSelected) {
+                    if (text.startsWith("SECTION:")) {
+                        lbl.setText(text.substring("SECTION:".length()));
+                        lbl.setBackground(new Color(227, 232, 238));
+                        lbl.setForeground(headerNavy);
+                        lbl.setFont(new Font("Segoe UI Historic", Font.BOLD, 12));
+                    } else if (text.startsWith("Selected Date:")) {
+                        lbl.setBackground(new Color(239, 245, 251));
+                        lbl.setForeground(headerNavy);
+                        lbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+                    } else {
+                        lbl.setBackground(Color.WHITE);
+                        lbl.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+                        if (text.contains("STOCK_DEDUCTION") || text.contains("PRODUCT_DELETED") || text.matches(".*\\s-\\d+\\s.*")) {
+                            lbl.setForeground(new Color(185, 28, 28));
+                        } else if (text.contains("[RENTAL")) {
+                            lbl.setForeground(text.contains("(RETURNED)") ? new Color(100, 116, 139) : new Color(11, 52, 90));
+                        } else if (text.matches(".*\\s\\+\\d+\\s.*")) {
+                            lbl.setForeground(new Color(21, 128, 61));
+                        } else {
+                            lbl.setForeground(subTitleBlue);
+                        }
+                    }
+                }
+                return lbl;
+            }
+        });
         JScrollPane actScroll = new JScrollPane(activityList);
         actScroll.setBorder(BorderFactory.createLineBorder(borderSoft));
+        actScroll.getViewport().setBackground(Color.WHITE);
         jPanel8.add(actScroll, BorderLayout.CENTER);
         jPanel8.revalidate();
         jPanel8.repaint();
+
+        // 4. Add + New Sale and Sales History buttons to Total Sales card (jPanel14)
+        JButton btnNewSale = new JButton("+ New Sale");
+        JButton btnSalesHistory = new JButton("Sales History");
+        for (JButton b : new JButton[]{btnNewSale, btnSalesHistory}) {
+            b.setBackground(new Color(192, 210, 224));
+            b.setForeground(headerNavy);
+            b.setFont(new Font("Segoe UI Historic", Font.BOLD, 11));
+            b.setMargin(new Insets(2, 6, 2, 6));
+            b.setFocusPainted(false);
+            b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        }
+        btnNewSale.addActionListener(e -> handleNewSale());
+        btnSalesHistory.addActionListener(e -> handleSalesHistory());
+        jPanel14.add(btnNewSale, new org.netbeans.lib.awtextra.AbsoluteConstraints(175, 18, 100, 28));
+        jPanel14.add(btnSalesHistory, new org.netbeans.lib.awtextra.AbsoluteConstraints(282, 18, 104, 28));
+        jPanel14.revalidate();
+        jPanel14.repaint();
     }
 
     private void setupListeners() {
@@ -530,7 +592,8 @@ public class DashboardPanel extends javax.swing.JFrame {
                 continue;
             }
             LocalDate date = currentMonth.atDay(dayNum);
-            boolean hasRental = hasRentalOnDate(date);
+            boolean hasActiveRental = hasActiveRentalOnDate(date);
+            boolean hasAnyRental = hasRentalOnDate(date);
             boolean isToday = date.equals(today);
             boolean isSelected = date.equals(selectedDate);
 
@@ -544,10 +607,14 @@ public class DashboardPanel extends javax.swing.JFrame {
                 dayBtn.setBackground(activeNavBg);
                 dayBtn.setForeground(Color.WHITE);
                 dayBtn.setBorder(BorderFactory.createLineBorder(new Color(0, 140, 210), 2));
-            } else if (hasRental) {
+            } else if (hasActiveRental) {
                 dayBtn.setBackground(new Color(21, 128, 61));
                 dayBtn.setForeground(Color.WHITE);
-                dayBtn.setToolTipText("Has scheduled rental(s)");
+                dayBtn.setToolTipText("Has active/reserved rental(s)");
+            } else if (hasAnyRental) {
+                dayBtn.setBackground(new Color(148, 163, 184));
+                dayBtn.setForeground(Color.WHITE);
+                dayBtn.setToolTipText("Completed/returned rental(s)");
             } else if (isToday) {
                 dayBtn.setBackground(subTitleBlue);
                 dayBtn.setForeground(Color.WHITE);
@@ -565,6 +632,19 @@ public class DashboardPanel extends javax.swing.JFrame {
         }
         jPanel9.revalidate();
         jPanel9.repaint();
+    }
+
+    private boolean hasActiveRentalOnDate(LocalDate date) {
+        for (Rental r : cachedRentals) {
+            if (r.getStatus() == RentalStatus.CANCELLED || r.getStatus() == RentalStatus.RETURNED) continue;
+            if (r.getRentalStart() == null || r.getExpectedReturn() == null) continue;
+            LocalDate start = r.getRentalStart().toLocalDate();
+            LocalDate end = r.getExpectedReturn().toLocalDate();
+            if (!date.isBefore(start) && !date.isAfter(end)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean hasRentalOnDate(LocalDate date) {
@@ -601,25 +681,11 @@ public class DashboardPanel extends javax.swing.JFrame {
             activityListModel.addElement("  No rentals scheduled on this date.");
         }
 
-        activityListModel.addElement("── Stock Status Summary ──");
-        if (cachedProducts.isEmpty()) {
-            activityListModel.addElement("  No active products loaded.");
-        } else {
-            for (Product p : cachedProducts) {
-                String tag = switch (computeStockStatus(p)) {
-                    case OUT_OF_STOCK -> "[OUT OF STOCK]";
-                    case LOW_STOCK -> "[LOW STOCK]";
-                    case IN_STOCK -> "[IN STOCK]";
-                };
-                activityListModel.addElement("  " + tag + " " + p.getProductName() + " — Qty: " + p.getQuantity());
-            }
-        }
-
-        activityListModel.addElement("── Recent Stock Movements ──");
+        activityListModel.addElement("SECTION:Recent Stock Movements");
         if (cachedMovements.isEmpty()) {
             activityListModel.addElement("  No recent stock movements.");
         } else {
-            int limit = Math.min(6, cachedMovements.size());
+            int limit = Math.min(8, cachedMovements.size());
             for (int i = 0; i < limit; i++) {
                 StockMovement m = cachedMovements.get(i);
                 String sign = m.getChangeAmount() > 0 ? "+" : "";
@@ -647,17 +713,18 @@ public class DashboardPanel extends javax.swing.JFrame {
             return;
         }
         UserRole role = session.getCurrentUser().getRole();
-        boolean isAdmin = role == UserRole.CHAIRPERSON || role == UserRole.BUSINESS_MANAGER;
         String info = "User: " + session.getCurrentUser().getFullName()
             + "\nUsername: " + session.getCurrentUser().getUsername()
             + "\nRole: " + role.name()
-            + "\nAccess Level: " + (isAdmin ? "Admin (Full Inventory & Approval Access)" : "Staff (View, Search, Sales, Request)");
+            + "\nAccess Level: Admin (Full System Access)";
 
         if (role == UserRole.CHAIRPERSON) {
-            Object[] options = {"Create New Account", "Close"};
+            Object[] options = {"Manage Users", "Create New Account", "Close"};
             int choice = JOptionPane.showOptionDialog(this, info, "Account & System Info",
-                JOptionPane.YES_NO_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[1]);
+                JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[2]);
             if (choice == 0) {
+                handleManageUsers();
+            } else if (choice == 1) {
                 createUserAccount();
             }
         } else {
@@ -665,11 +732,363 @@ public class DashboardPanel extends javax.swing.JFrame {
         }
     }
 
+    private void handleManageUsers() {
+        AuthService auth = new AuthService(session);
+        javax.swing.JDialog dialog = new javax.swing.JDialog(this, "User Account Management", true);
+        dialog.setLayout(new BorderLayout(8, 8));
+
+        DefaultTableModel model = new DefaultTableModel(
+            new String[]{"ID", "Username", "Full Name", "Role", "Active"}, 0
+        ) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        JTable table = new JTable(model);
+        table.setRowHeight(24);
+        table.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+
+        Runnable reload = () -> {
+            model.setRowCount(0);
+            try {
+                for (User u : auth.getAllUsers()) {
+                    model.addRow(new Object[]{
+                        u.getUserId(),
+                        u.getUsername(),
+                        u.getFullName(),
+                        u.getRole().name(),
+                        u.isActive() ? "YES" : "NO"
+                    });
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, ex.getMessage(), "User Management", JOptionPane.ERROR_MESSAGE);
+            }
+        };
+        reload.run();
+
+        JButton btnCreate = new JButton("Create Account");
+        JButton btnToggle = new JButton("Activate / Deactivate");
+        JButton btnClose = new JButton("Close");
+
+        btnCreate.addActionListener(e -> {
+            createUserAccount();
+            reload.run();
+        });
+        btnToggle.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row < 0) {
+                JOptionPane.showMessageDialog(dialog, "Select a user first.");
+                return;
+            }
+            int userId = ((Number) model.getValueAt(row, 0)).intValue();
+            boolean currentlyActive = "YES".equals(model.getValueAt(row, 4));
+            try {
+                auth.setUserActive(userId, !currentlyActive);
+                reload.run();
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, ex.getMessage(), "User Management", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        btnClose.addActionListener(e -> dialog.dispose());
+
+        JPanel btnBar = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT));
+        btnBar.add(btnCreate);
+        btnBar.add(btnToggle);
+        btnBar.add(btnClose);
+
+        JScrollPane scroll = new JScrollPane(table);
+        scroll.setPreferredSize(new Dimension(600, 260));
+        dialog.add(scroll, BorderLayout.CENTER);
+        dialog.add(btnBar, BorderLayout.SOUTH);
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
+    }
+
+    private void handleNewSale() {
+        if (session == null || !session.isLoggedIn() || salesService == null || productService == null || bundleService == null) {
+            return;
+        }
+        try {
+            List<Product> products = productService.getAllProducts();
+            List<Bundle> bundles = bundleService.getAllBundles();
+            if (products.isEmpty() && bundles.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "No active products or bundles available to sell.", "New Sale", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            DefaultTableModel model = new DefaultTableModel(
+                new String[]{"Select", "Type", "ID", "Item Name", "Price (PHP)", "Stock", "Qty Sold", "Subtotal (PHP)"}, 0
+            ) {
+                @Override
+                public Class<?> getColumnClass(int columnIndex) {
+                    return switch (columnIndex) {
+                        case 0 -> Boolean.class;
+                        case 2, 6 -> Integer.class;
+                        default -> String.class;
+                    };
+                }
+
+                @Override
+                public boolean isCellEditable(int row, int column) {
+                    return column == 0 || column == 6;
+                }
+            };
+
+            for (Product p : products) {
+                model.addRow(new Object[]{
+                    Boolean.FALSE, "PRODUCT", p.getProductId(), p.getProductName(),
+                    String.format("%,.2f", p.getPriceCentavos() / 100.0), String.valueOf(p.getQuantity()), 1, "0.00"
+                });
+            }
+            for (Bundle b : bundles) {
+                model.addRow(new Object[]{
+                    Boolean.FALSE, "BUNDLE", b.getBundleId(), b.getBundleName(),
+                    String.format("%,.2f", b.getPriceCentavos() / 100.0), "-", 1, "0.00"
+                });
+            }
+
+            JTable table = new JTable(model);
+            table.setRowHeight(26);
+            table.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+            table.getColumnModel().getColumn(0).setMaxWidth(55);
+            table.getColumnModel().getColumn(1).setMaxWidth(75);
+            table.getColumnModel().getColumn(2).setMaxWidth(45);
+            table.getColumnModel().getColumn(5).setMaxWidth(55);
+            table.getColumnModel().getColumn(6).setMaxWidth(70);
+            table.getColumnModel().getColumn(7).setPreferredWidth(100);
+
+            JScrollPane scroll = new JScrollPane(table);
+            scroll.setPreferredSize(new Dimension(700, 260));
+
+            JLabel lblRunningTotal = new JLabel("Estimated Total: PHP 0.00 (0 items)");
+            lblRunningTotal.setFont(new Font("Segoe UI Historic", Font.BOLD, 14));
+            lblRunningTotal.setForeground(new Color(9, 30, 57));
+
+            final boolean[] updating = {false};
+            Runnable updateTotal = () -> {
+                if (updating[0]) return;
+                updating[0] = true;
+                try {
+                    long sum = 0;
+                    int totalUnits = 0;
+                    int prodCount = products.size();
+                    for (int r = 0; r < model.getRowCount(); r++) {
+                        boolean selected = Boolean.TRUE.equals(model.getValueAt(r, 0));
+                        Object qObj = model.getValueAt(r, 6);
+                        int qty = qObj instanceof Number ? ((Number) qObj).intValue() : 0;
+                        if (qty < 0) {
+                            qty = 0;
+                            model.setValueAt(0, r, 6);
+                        }
+                        long unit = r < prodCount ? products.get(r).getPriceCentavos() : bundles.get(r - prodCount).getPriceCentavos();
+                        long rowSub = selected && qty > 0 ? unit * qty : 0L;
+                        model.setValueAt(String.format("%,.2f", rowSub / 100.0), r, 7);
+                        if (selected && qty > 0) {
+                            sum += rowSub;
+                            totalUnits += qty;
+                        }
+                    }
+                    lblRunningTotal.setText(String.format("Estimated Total: PHP %,.2f (%d units)", sum / 100.0, totalUnits));
+                } finally {
+                    updating[0] = false;
+                }
+            };
+
+            model.addTableModelListener(ev -> {
+                if (updating[0]) return;
+                int row = ev.getFirstRow();
+                int col = ev.getColumn();
+                if (row >= 0 && col == 6) {
+                    Object qObj = model.getValueAt(row, 6);
+                    int qty = qObj instanceof Number ? ((Number) qObj).intValue() : 0;
+                    updating[0] = true;
+                    model.setValueAt(qty > 0, row, 0);
+                    updating[0] = false;
+                }
+                updateTotal.run();
+            });
+
+            JButton btnMinus = new JButton("-1 Qty");
+            JButton btnPlus = new JButton("+1 Qty");
+            JButton btnSetQty = new JButton("Set Qty...");
+            java.util.function.IntConsumer adjustSelectedQty = delta -> {
+                if (table.isEditing()) table.getCellEditor().stopCellEditing();
+                int row = table.getSelectedRow();
+                if (row < 0) {
+                    JOptionPane.showMessageDialog(this, "Select a product or bundle row first.", "New Sale", JOptionPane.INFORMATION_MESSAGE);
+                    return;
+                }
+                int cur = ((Number) model.getValueAt(row, 6)).intValue();
+                int next = Math.max(0, cur + delta);
+                model.setValueAt(next, row, 6);
+                model.setValueAt(next > 0, row, 0);
+            };
+            btnMinus.addActionListener(e -> adjustSelectedQty.accept(-1));
+            btnPlus.addActionListener(e -> adjustSelectedQty.accept(1));
+            btnSetQty.addActionListener(e -> {
+                if (table.isEditing()) table.getCellEditor().stopCellEditing();
+                int row = table.getSelectedRow();
+                if (row < 0) {
+                    JOptionPane.showMessageDialog(this, "Select a product or bundle row first.", "New Sale", JOptionPane.INFORMATION_MESSAGE);
+                    return;
+                }
+                String input = JOptionPane.showInputDialog(this, "Enter quantity sold:", model.getValueAt(row, 6));
+                if (input == null || input.isBlank()) return;
+                try {
+                    int val = Math.max(0, Integer.parseInt(input.trim()));
+                    model.setValueAt(val, row, 6);
+                    model.setValueAt(val > 0, row, 0);
+                } catch (NumberFormatException nfe) {
+                    JOptionPane.showMessageDialog(this, "Enter a valid whole number.", "New Sale", JOptionPane.ERROR_MESSAGE);
+                }
+            });
+
+            JPanel qtyControls = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 0));
+            qtyControls.add(btnMinus);
+            qtyControls.add(btnPlus);
+            qtyControls.add(btnSetQty);
+
+            JPanel bottomBar = new JPanel(new BorderLayout(12, 0));
+            bottomBar.add(qtyControls, BorderLayout.WEST);
+            bottomBar.add(lblRunningTotal, BorderLayout.EAST);
+
+            JPanel posPanel = new JPanel(new BorderLayout(0, 8));
+            posPanel.add(scroll, BorderLayout.CENTER);
+            posPanel.add(bottomBar, BorderLayout.SOUTH);
+
+            int res = JOptionPane.showConfirmDialog(this, posPanel, "Record New Sale (POS)", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+            if (res != JOptionPane.OK_OPTION) {
+                return;
+            }
+            if (table.isEditing()) {
+                table.getCellEditor().stopCellEditing();
+            }
+
+            List<SaleItem> items = new ArrayList<>();
+            int prodCount = products.size();
+            for (int r = 0; r < model.getRowCount(); r++) {
+                if (Boolean.TRUE.equals(model.getValueAt(r, 0))) {
+                    int qty = ((Number) model.getValueAt(r, 6)).intValue();
+                    if (qty <= 0) {
+                        JOptionPane.showMessageDialog(this, "Quantity must be greater than zero.", "New Sale", JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+                    if (r < prodCount) {
+                        Product p = products.get(r);
+                        items.add(new SaleItem(p.getProductId(), p.getProductName(), p.getPriceCentavos(), qty, (long) p.getPriceCentavos() * qty));
+                    } else {
+                        Bundle b = bundles.get(r - prodCount);
+                        items.add(SaleItem.forBundle(b.getBundleId(), b.getBundleName(), b.getPriceCentavos(), qty, b.getPriceCentavos() * qty));
+                    }
+                }
+            }
+
+            if (items.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Select at least one item to sell.", "New Sale", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            long saleId = salesService.recordSale(items);
+            Sale recorded = salesService.getSaleById(saleId);
+            loadDashboardData();
+            JOptionPane.showMessageDialog(
+                this,
+                String.format("Sale #%d recorded! Total: PHP %,.2f", saleId, recorded != null ? recorded.getTotalCentavos() / 100.0 : 0.0),
+                "Sale Recorded",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "New Sale", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void handleSalesHistory() {
+        if (session == null || !session.isLoggedIn() || salesService == null) {
+            return;
+        }
+        try {
+            List<Sale> sales = salesService.getAllSales();
+            if (sales.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "No sales recorded yet.", "Sales History", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+
+            javax.swing.JDialog dialog = new javax.swing.JDialog(this, "Sales History", true);
+            dialog.setLayout(new BorderLayout(8, 8));
+
+            DefaultTableModel model = new DefaultTableModel(
+                new String[]{"Sale ID", "Processed By", "Total (PHP)", "Date", "Items"}, 0
+            ) {
+                @Override
+                public boolean isCellEditable(int row, int column) {
+                    return false;
+                }
+            };
+            for (Sale s : sales) {
+                model.addRow(new Object[]{
+                    s.getSaleId(),
+                    s.getProcessedBy(),
+                    String.format("PHP %,.2f", s.getTotalCentavos() / 100.0),
+                    s.getSaleDate() == null ? "-" : s.getSaleDate().toString(),
+                    s.getItems().size()
+                });
+            }
+
+            JTable table = new JTable(model);
+            table.setRowHeight(24);
+            table.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+
+            JButton btnDetails = new JButton("View Sale Receipt");
+            JButton btnClose = new JButton("Close");
+            btnDetails.addActionListener(e -> {
+                int row = table.getSelectedRow();
+                if (row < 0) return;
+                long saleId = ((Number) model.getValueAt(row, 0)).longValue();
+                try {
+                    Sale s = salesService.getSaleById(saleId);
+                    if (s == null) return;
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("Sale #").append(s.getSaleId())
+                      .append("\nDate: ").append(s.getSaleDate())
+                      .append("\nProcessed By User #").append(s.getProcessedBy())
+                      .append(String.format("\nTotal: PHP %,.2f\n\nItems:\n", s.getTotalCentavos() / 100.0));
+                    for (SaleItem item : s.getItems()) {
+                        sb.append(String.format(" - %s x%d @ PHP %,.2f = PHP %,.2f\n",
+                            item.getProductName(),
+                            item.getQuantity(),
+                            item.getUnitPriceCentavos() / 100.0,
+                            item.getSubtotalCentavos() / 100.0));
+                    }
+                    JOptionPane.showMessageDialog(dialog, sb.toString(), "Sale Receipt #" + saleId, JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(dialog, ex.getMessage(), "Sales History", JOptionPane.ERROR_MESSAGE);
+                }
+            });
+            btnClose.addActionListener(e -> dialog.dispose());
+
+            JPanel btnBar = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT));
+            btnBar.add(btnDetails);
+            btnBar.add(btnClose);
+
+            JScrollPane scroll = new JScrollPane(table);
+            scroll.setPreferredSize(new Dimension(620, 280));
+            dialog.add(scroll, BorderLayout.CENTER);
+            dialog.add(btnBar, BorderLayout.SOUTH);
+            dialog.pack();
+            dialog.setLocationRelativeTo(this);
+            dialog.setVisible(true);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Sales History", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
     private void createUserAccount() {
         JTextField usernameField = new JTextField();
         JTextField fullNameField = new JTextField();
         JPasswordField passwordField = new JPasswordField();
-        JComboBox<UserRole> roleBox = new JComboBox<>(UserRole.values());
+        JComboBox<UserRole> roleBox = new JComboBox<>(new UserRole[]{UserRole.CHAIRPERSON, UserRole.BUSINESS_MANAGER});
         JPanel form = new JPanel(new GridLayout(0, 2, 8, 8));
         form.add(new JLabel("Username:"));
         form.add(usernameField);

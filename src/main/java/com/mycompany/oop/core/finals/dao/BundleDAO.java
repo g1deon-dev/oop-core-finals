@@ -1,385 +1,198 @@
-
 package com.mycompany.oop.core.finals.dao;
 
 import com.mycompany.oop.core.finals.model.Bundle;
 import com.mycompany.oop.core.finals.model.BundleItem;
-import com.mycompany.oop.core.finals.util.DatabaseConnection;
+import com.mycompany.oop.core.finals.model.Product;
+import com.mycompany.oop.core.finals.util.CsvStorage;
 
-import java.sql.*;
+import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 public class BundleDAO {
 
+    private static final String BUNDLES_FILE = "bundles.csv";
+    private static final String[] BUNDLES_HEADERS = {
+        "bundle_id", "bundle_name", "price_centavos", "is_active"
+    };
+
+    private static final String ITEMS_FILE = "bundle_items.csv";
+    private static final String[] ITEMS_HEADERS = {
+        "bundle_id", "product_id", "quantity"
+    };
+
+    private final ProductDAO productDAO = new ProductDAO();
+
     public void addBundle(Bundle bundle) throws SQLException {
-
         validateBundle(bundle);
+        validateProducts(bundle.getItems());
 
-        String bundleSql = """
-            INSERT INTO bundles (bundle_name, price_centavos)
-            VALUES (?, ?)
-            """;
+        List<String[]> bundleRows = CsvStorage.readAllRows(BUNDLES_FILE, BUNDLES_HEADERS);
+        int bundleId = CsvStorage.nextIntId(bundleRows, 0);
+        bundleRows.add(new String[]{
+            String.valueOf(bundleId),
+            bundle.getBundleName().trim(),
+            String.valueOf(bundle.getPriceCentavos()),
+            "true"
+        });
+        CsvStorage.writeAllRows(BUNDLES_FILE, BUNDLES_HEADERS, bundleRows);
 
-        String itemSql = """
-            INSERT INTO bundle_items (bundle_id, product_id, quantity)
-            VALUES (?, ?, ?)
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection()) {
-
-            conn.setAutoCommit(false);
-
-            try {
-                validateProducts(conn, bundle.getItems());
-
-                int bundleId;
-
-                try (PreparedStatement stmt = conn.prepareStatement(
-                        bundleSql, Statement.RETURN_GENERATED_KEYS)) {
-
-                    stmt.setString(1, bundle.getBundleName().trim());
-                    stmt.setLong(2, bundle.getPriceCentavos());
-
-                    stmt.executeUpdate();
-
-                    try (ResultSet keys = stmt.getGeneratedKeys()) {
-                        if (!keys.next()) {
-                            throw new SQLException(
-                                "Creating bundle failed. No ID generated."
-                            );
-                        }
-
-                        bundleId = keys.getInt(1);
-                    }
-                }
-
-                insertBundleItems(conn, itemSql,
-                                  bundleId, bundle.getItems());
-
-                conn.commit();
-
-            } catch (SQLException | RuntimeException e) {
-                conn.rollback();
-                throw e;
-            } finally {
-                conn.setAutoCommit(true);
-            }
+        List<String[]> itemRows = CsvStorage.readAllRows(ITEMS_FILE, ITEMS_HEADERS);
+        for (BundleItem item : bundle.getItems()) {
+            itemRows.add(new String[]{
+                String.valueOf(bundleId),
+                String.valueOf(item.getProductId()),
+                String.valueOf(item.getQuantity())
+            });
         }
+        CsvStorage.writeAllRows(ITEMS_FILE, ITEMS_HEADERS, itemRows);
     }
 
     public List<Bundle> getAllBundles() throws SQLException {
-
         List<Bundle> bundles = new ArrayList<>();
-
-        String sql = """
-            SELECT bundle_id, bundle_name, price_centavos, is_active
-            FROM bundles
-            WHERE is_active = TRUE
-            ORDER BY bundle_name
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-
-            while (rs.next()) {
-                bundles.add(buildBundle(conn, rs));
+        for (String[] r : CsvStorage.readAllRows(BUNDLES_FILE, BUNDLES_HEADERS)) {
+            if (Boolean.parseBoolean(r[3])) {
+                bundles.add(buildBundle(r));
             }
         }
-
+        bundles.sort(Comparator.comparing(Bundle::getBundleName, String.CASE_INSENSITIVE_ORDER));
         return bundles;
     }
 
     public Bundle getBundleById(int bundleId) throws SQLException {
-
-        String sql = """
-            SELECT bundle_id, bundle_name, price_centavos, is_active
-            FROM bundles
-            WHERE bundle_id = ?
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setInt(1, bundleId);
-
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return buildBundle(conn, rs);
-                }
+        for (String[] r : CsvStorage.readAllRows(BUNDLES_FILE, BUNDLES_HEADERS)) {
+            if (Integer.parseInt(r[0]) == bundleId) {
+                return buildBundle(r);
             }
         }
-
         return null;
     }
 
     public void updateBundle(Bundle bundle) throws SQLException {
-
         validateBundle(bundle);
+        validateProducts(bundle.getItems());
 
-        if (bundle.getBundleId() <= 0) {
-            throw new IllegalArgumentException("Invalid bundle ID.");
-        }
-
-        String updateSql = """
-            UPDATE bundles
-            SET bundle_name = ?, price_centavos = ?
-            WHERE bundle_id = ?
-            """;
-
-        String deleteItemsSql = """
-            DELETE FROM bundle_items
-            WHERE bundle_id = ?
-            """;
-
-        String insertItemsSql = """
-            INSERT INTO bundle_items (bundle_id, product_id, quantity)
-            VALUES (?, ?, ?)
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection()) {
-
-            conn.setAutoCommit(false);
-
-            try {
-                validateProducts(conn, bundle.getItems());
-
-                try (PreparedStatement stmt =
-                        conn.prepareStatement(updateSql)) {
-
-                    stmt.setString(1, bundle.getBundleName().trim());
-                    stmt.setLong(2, bundle.getPriceCentavos());
-                    stmt.setInt(3, bundle.getBundleId());
-
-                    if (stmt.executeUpdate() == 0) {
-                        throw new SQLException("Bundle not found.");
-                    }
-                }
-
-                try (PreparedStatement stmt =
-                        conn.prepareStatement(deleteItemsSql)) {
-
-                    stmt.setInt(1, bundle.getBundleId());
-                    stmt.executeUpdate();
-                }
-
-                insertBundleItems(conn, insertItemsSql,
-                                  bundle.getBundleId(), bundle.getItems());
-
-                conn.commit();
-
-            } catch (SQLException | RuntimeException e) {
-                conn.rollback();
-                throw e;
-            } finally {
-                conn.setAutoCommit(true);
+        List<String[]> bundleRows = CsvStorage.readAllRows(BUNDLES_FILE, BUNDLES_HEADERS);
+        boolean found = false;
+        for (String[] r : bundleRows) {
+            if (Integer.parseInt(r[0]) == bundle.getBundleId()) {
+                r[1] = bundle.getBundleName().trim();
+                r[2] = String.valueOf(bundle.getPriceCentavos());
+                found = true;
+                break;
             }
         }
+        if (!found) {
+            throw new SQLException("Bundle not found.");
+        }
+        CsvStorage.writeAllRows(BUNDLES_FILE, BUNDLES_HEADERS, bundleRows);
+
+        List<String[]> itemRows = CsvStorage.readAllRows(ITEMS_FILE, ITEMS_HEADERS);
+        itemRows.removeIf(r -> Integer.parseInt(r[0]) == bundle.getBundleId());
+        for (BundleItem item : bundle.getItems()) {
+            itemRows.add(new String[]{
+                String.valueOf(bundle.getBundleId()),
+                String.valueOf(item.getProductId()),
+                String.valueOf(item.getQuantity())
+            });
+        }
+        CsvStorage.writeAllRows(ITEMS_FILE, ITEMS_HEADERS, itemRows);
     }
 
     public void deactivateBundle(int bundleId) throws SQLException {
-
         updateBundleStatus(bundleId, false);
     }
 
     public void reactivateBundle(int bundleId) throws SQLException {
-
         updateBundleStatus(bundleId, true);
     }
 
-    private void updateBundleStatus(
-            int bundleId, boolean active) throws SQLException {
-
-        String sql = """
-            UPDATE bundles
-            SET is_active = ?
-            WHERE bundle_id = ?
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setBoolean(1, active);
-            stmt.setInt(2, bundleId);
-
-            if (stmt.executeUpdate() == 0) {
-                throw new SQLException("Bundle not found.");
+    private void updateBundleStatus(int bundleId, boolean active) throws SQLException {
+        List<String[]> rows = CsvStorage.readAllRows(BUNDLES_FILE, BUNDLES_HEADERS);
+        boolean found = false;
+        for (String[] r : rows) {
+            if (Integer.parseInt(r[0]) == bundleId) {
+                r[3] = String.valueOf(active);
+                found = true;
+                break;
             }
         }
+        if (!found) {
+            throw new SQLException("Bundle not found.");
+        }
+        CsvStorage.writeAllRows(BUNDLES_FILE, BUNDLES_HEADERS, rows);
     }
 
-    public boolean bundleNameExists(String bundleName)
-            throws SQLException {
-
-        String sql = """
-            SELECT COUNT(*)
-            FROM bundles
-            WHERE LOWER(TRIM(bundle_name)) = LOWER(TRIM(?))
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setString(1, bundleName);
-
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getInt(1) > 0;
-                }
+    public boolean bundleNameExists(String bundleName) throws SQLException {
+        String target = bundleName.trim().toLowerCase();
+        for (String[] r : CsvStorage.readAllRows(BUNDLES_FILE, BUNDLES_HEADERS)) {
+            if (r[1].trim().toLowerCase().equals(target)) {
+                return true;
             }
         }
-
         return false;
     }
 
-    private Bundle buildBundle(
-            Connection conn, ResultSet rs) throws SQLException {
-
-        int bundleId = rs.getInt("bundle_id");
-
-        String itemSql = """
-            SELECT bi.bundle_id,
-                   bi.product_id, p.product_name, bi.quantity
-            FROM bundle_items bi
-            JOIN products p ON bi.product_id = p.product_id
-            WHERE bi.bundle_id = ?
-            ORDER BY bi.product_id
-            """;
-
+    private Bundle buildBundle(String[] r) throws SQLException {
+        int bundleId = Integer.parseInt(r[0]);
         List<BundleItem> items = new ArrayList<>();
-
-        try (PreparedStatement stmt = conn.prepareStatement(itemSql)) {
-
-            stmt.setInt(1, bundleId);
-
-            try (ResultSet itemRs = stmt.executeQuery()) {
-                while (itemRs.next()) {
-
-                    items.add(new BundleItem(
-                        0,
-                        itemRs.getInt("bundle_id"),
-                        itemRs.getInt("product_id"),
-                        itemRs.getString("product_name"),
-                        itemRs.getInt("quantity")
-                    ));
-                }
+        for (String[] ir : CsvStorage.readAllRows(ITEMS_FILE, ITEMS_HEADERS)) {
+            if (Integer.parseInt(ir[0]) == bundleId) {
+                int productId = Integer.parseInt(ir[1]);
+                Product p = productDAO.getProductById(productId);
+                String name = p != null ? p.getProductName() : ("Product #" + productId);
+                items.add(new BundleItem(0, bundleId, productId, name, Integer.parseInt(ir[2])));
             }
         }
-
+        items.sort(Comparator.comparingInt(BundleItem::getProductId));
         return new Bundle(
             bundleId,
-            rs.getString("bundle_name"),
-            rs.getLong("price_centavos"),
-            rs.getBoolean("is_active"),
+            r[1],
+            Long.parseLong(r[2]),
+            Boolean.parseBoolean(r[3]),
             items
         );
     }
 
-    private void validateBundle(Bundle bundle) {
+    private void validateProducts(List<BundleItem> items) throws SQLException {
+        for (BundleItem item : items) {
+            Product p = productDAO.getProductById(item.getProductId());
+            if (p == null) {
+                throw new SQLException("Product not found: " + item.getProductId());
+            }
+            if (!p.isActive()) {
+                throw new SQLException("Cannot add inactive product: " + p.getProductName());
+            }
+        }
+    }
 
+    private void validateBundle(Bundle bundle) {
         if (bundle == null) {
             throw new IllegalArgumentException("Bundle cannot be null.");
         }
-
-        if (bundle.getBundleName() == null
-                || bundle.getBundleName().trim().isEmpty()) {
-            throw new IllegalArgumentException(
-                "Bundle name cannot be empty."
-            );
+        if (bundle.getBundleName() == null || bundle.getBundleName().trim().isEmpty()) {
+            throw new IllegalArgumentException("Bundle name cannot be empty.");
         }
-
         if (bundle.getPriceCentavos() < 0) {
-            throw new IllegalArgumentException(
-                "Bundle price cannot be negative."
-            );
+            throw new IllegalArgumentException("Bundle price cannot be negative.");
         }
-
         if (bundle.getItems() == null || bundle.getItems().isEmpty()) {
-            throw new IllegalArgumentException(
-                "A bundle must contain at least one product."
-            );
+            throw new IllegalArgumentException("A bundle must contain at least one product.");
         }
-
         Set<Integer> productIds = new HashSet<>();
-
         for (BundleItem item : bundle.getItems()) {
-
             if (item == null || item.getProductId() <= 0) {
-                throw new IllegalArgumentException(
-                    "Invalid product in bundle."
-                );
+                throw new IllegalArgumentException("Invalid product in bundle.");
             }
-
             if (item.getQuantity() <= 0) {
-                throw new IllegalArgumentException(
-                    "Component quantity must be greater than zero."
-                );
+                throw new IllegalArgumentException("Component quantity must be greater than zero.");
             }
-
             if (!productIds.add(item.getProductId())) {
-                throw new IllegalArgumentException(
-                    "A product cannot appear twice in the same bundle."
-                );
+                throw new IllegalArgumentException("A product cannot appear twice in the same bundle.");
             }
-        }
-    }
-
-    private void validateProducts(
-            Connection conn, List<BundleItem> items)
-            throws SQLException {
-
-        String sql = """
-            SELECT is_active
-            FROM products
-            WHERE product_id = ?
-            FOR UPDATE
-            """;
-
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            for (BundleItem item : items) {
-
-                stmt.setInt(1, item.getProductId());
-
-                try (ResultSet rs = stmt.executeQuery()) {
-
-                    if (!rs.next()) {
-                        throw new SQLException(
-                            "Product ID " + item.getProductId()
-                            + " does not exist."
-                        );
-                    }
-
-                    if (!rs.getBoolean("is_active")) {
-                        throw new SQLException(
-                            "Product ID " + item.getProductId()
-                            + " is inactive."
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    private void insertBundleItems(
-            Connection conn, String sql,
-            int bundleId, List<BundleItem> items)
-            throws SQLException {
-
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            for (BundleItem item : items) {
-
-                stmt.setInt(1, bundleId);
-                stmt.setInt(2, item.getProductId());
-                stmt.setInt(3, item.getQuantity());
-
-                stmt.addBatch();
-            }
-
-            stmt.executeBatch();
         }
     }
 }

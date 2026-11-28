@@ -1,517 +1,233 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package com.mycompany.oop.core.finals.dao;
 
-/**
- *
- * @author g1deon-dev
- */
-
+import com.mycompany.oop.core.finals.model.Product;
 import com.mycompany.oop.core.finals.model.ProductSortField;
 import com.mycompany.oop.core.finals.model.SortDirection;
 import com.mycompany.oop.core.finals.model.StockStatus;
-import com.mycompany.oop.core.finals.model.Product;
-import com.mycompany.oop.core.finals.util.DatabaseConnection;
-import java.sql.*;
+import com.mycompany.oop.core.finals.util.CsvStorage;
+
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 public class ProductDAO {
-    
+
+    private static final String FILE = "products.csv";
+    private static final String[] HEADERS = {
+        "product_id", "product_name", "price_centavos", "quantity", "low_stock_threshold", "is_active"
+    };
+
     public void addProduct(Product product) throws SQLException {
         addProductAndReturnId(product);
     }
 
     public int addProductAndReturnId(Product product) throws SQLException {
-        String sql = """
-                     INSERT INTO products
-                     (product_name, price_centavos, quantity, low_stock_threshold)
-                     VALUES (?,?,?,?)
-                     """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            stmt.setString(1, product.getProductName());
-            stmt.setInt(2, product.getPriceCentavos());
-            stmt.setInt(3, product.getQuantity());
-            stmt.setInt(4, product.getLowStockThreshold());
-
-            stmt.executeUpdate();
-            try (ResultSet keys = stmt.getGeneratedKeys()) {
-                if (keys.next()) {
-                    return keys.getInt(1);
-                }
-            }
-            return 0;
-        }
+        List<String[]> rows = CsvStorage.readAllRows(FILE, HEADERS);
+        int id = CsvStorage.nextIntId(rows, 0);
+        rows.add(new String[]{
+            String.valueOf(id),
+            product.getProductName(),
+            String.valueOf(product.getPriceCentavos()),
+            String.valueOf(product.getQuantity()),
+            String.valueOf(product.getLowStockThreshold()),
+            "true"
+        });
+        CsvStorage.writeAllRows(FILE, HEADERS, rows);
+        return id;
     }
 
     public void adjustStock(Connection conn, int productId, int delta) throws SQLException {
-        String sql = """
-            UPDATE products
-            SET quantity = quantity + ?
-            WHERE product_id = ? AND is_active = TRUE AND quantity + ? >= 0
-            """;
-
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setInt(1, delta);
-            stmt.setInt(2, productId);
-            stmt.setInt(3, delta);
-
-            int rowsUpdated = stmt.executeUpdate();
-            if (rowsUpdated == 0) {
-                throw new SQLException("Product not found, inactive, or insufficient stock for deduction.");
-            }
-        }
-    }
-    
-    public List<Product> getAllProducts() throws SQLException {
-    
-        List<Product> products = new ArrayList<>();
-        
-        String sql = """
-            SELECT * FROM products
-            WHERE is_active = TRUE
-            ORDER BY product_id
-            """;
-        
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-            
-            while (rs.next()) {
-
-                Product product = new Product(
-                    rs.getInt("product_id"),
-                    rs.getString("product_name"),
-                    rs.getInt("price_centavos"),
-                    rs.getInt("quantity"),
-                    rs.getInt("low_stock_threshold"),
-                    rs.getBoolean("is_active")
-                );
-
-                products.add(product);
-            }
-        }
-        
-        return products;
-        
-    
-    }
-    
-    public List<Product> searchProducts(String keyword) throws SQLException {
-        List<Product> products = new ArrayList<>();
-
-        String sql = """
-        SELECT * FROM products
-        WHERE product_name LIKE ?
-        AND is_active = TRUE
-        ORDER BY product_name
-        """;
-
-        try (Connection conn = DatabaseConnection.getConnection(); PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setString(1, "%" + keyword + "%");
-
-            try(ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    Product product = new Product(
-                        rs.getInt("product_id"),
-                        rs.getString("product_name"),
-                        rs.getInt("price_centavos"),
-                        rs.getInt("quantity"),
-                        rs.getInt("low_stock_threshold"),
-                        rs.getBoolean("is_active")
-                    );
-
-                    products.add(product);
+        List<String[]> rows = CsvStorage.readAllRows(FILE, HEADERS);
+        boolean updated = false;
+        for (String[] r : rows) {
+            if (Integer.parseInt(r[0]) == productId && Boolean.parseBoolean(r[5])) {
+                int current = Integer.parseInt(r[3]);
+                if (current + delta < 0) {
+                    throw new SQLException("Product not found, inactive, or insufficient stock for deduction.");
                 }
+                r[3] = String.valueOf(current + delta);
+                updated = true;
+                break;
             }
-
         }
+        if (!updated) {
+            throw new SQLException("Product not found, inactive, or insufficient stock for deduction.");
+        }
+        CsvStorage.writeAllRows(FILE, HEADERS, rows);
+    }
 
+    public List<Product> getAllProducts() throws SQLException {
+        List<Product> products = new ArrayList<>();
+        for (String[] r : CsvStorage.readAllRows(FILE, HEADERS)) {
+            Product p = mapRow(r);
+            if (p.isActive()) {
+                products.add(p);
+            }
+        }
+        products.sort(Comparator.comparingInt(Product::getProductId));
+        return products;
+    }
+
+    public List<Product> searchProducts(String keyword) throws SQLException {
+        String lower = keyword.toLowerCase();
+        List<Product> products = new ArrayList<>();
+        for (Product p : getAllProducts()) {
+            if (p.getProductName().toLowerCase().contains(lower)) {
+                products.add(p);
+            }
+        }
+        products.sort(Comparator.comparing(Product::getProductName, String.CASE_INSENSITIVE_ORDER));
         return products;
     }
 
     public Product getProductById(int productId) throws SQLException {
-        String sql = """
-            SELECT * FROM products
-            WHERE product_id = ?
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setInt(1, productId);
-
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return new Product(
-                        rs.getInt("product_id"),
-                        rs.getString("product_name"),
-                        rs.getInt("price_centavos"),
-                        rs.getInt("quantity"),
-                        rs.getInt("low_stock_threshold"),
-                        rs.getBoolean("is_active")
-                    );
-                }
+        for (String[] r : CsvStorage.readAllRows(FILE, HEADERS)) {
+            if (Integer.parseInt(r[0]) == productId) {
+                return mapRow(r);
             }
         }
-
         return null;
     }
 
     public void restockProduct(int productId, int quantityToAdd) throws SQLException {
-        String sql = """
-            UPDATE products
-            SET quantity = quantity + ?
-            WHERE product_id = ? AND is_active = TRUE
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setInt(1, quantityToAdd);
-            stmt.setInt(2, productId);
-
-            int rowsUpdated = stmt.executeUpdate();
-
-            if (rowsUpdated == 0) {
-                throw new SQLException("Product not found or inactive.");
-            }
-        }
+        adjustStock(null, productId, quantityToAdd);
     }
 
     public void updateProduct(Product product) throws SQLException {
-
-        String sql = """
-            UPDATE products
-            SET product_name = ?,
-                price_centavos = ?,
-                low_stock_threshold = ?
-            WHERE product_id = ?
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-            PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setString(1, product.getProductName());
-            stmt.setInt(2, product.getPriceCentavos());
-            stmt.setInt(3, product.getLowStockThreshold());
-            stmt.setInt(4, product.getProductId());
-
-            int rowsUpdated = stmt.executeUpdate();
-
-            if (rowsUpdated == 0) {
-                throw new SQLException("Product not found.");
+        List<String[]> rows = CsvStorage.readAllRows(FILE, HEADERS);
+        boolean found = false;
+        for (String[] r : rows) {
+            if (Integer.parseInt(r[0]) == product.getProductId() && Boolean.parseBoolean(r[5])) {
+                r[1] = product.getProductName();
+                r[2] = String.valueOf(product.getPriceCentavos());
+                r[4] = String.valueOf(product.getLowStockThreshold());
+                found = true;
+                break;
             }
         }
-    }
-        public void deactivateProduct(int productId) throws SQLException {
-
-    String sql = """
-        UPDATE products
-        SET is_active = FALSE
-        WHERE product_id = ?
-        """;
-
-    try (Connection conn = DatabaseConnection.getConnection();
-         PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-        stmt.setInt(1, productId);
-
-        int rowsUpdated = stmt.executeUpdate();
-
-        if (rowsUpdated == 0) {
-            throw new SQLException("Product not found.");
+        if (!found) {
+            throw new SQLException("Product not found or inactive.");
         }
+        CsvStorage.writeAllRows(FILE, HEADERS, rows);
     }
+
+    public void deactivateProduct(int productId) throws SQLException {
+        setProductActive(productId, false);
     }
 
     public List<Product> getInactiveProducts() throws SQLException {
         List<Product> products = new ArrayList<>();
-
-        String sql = """
-            SELECT * FROM products
-            WHERE is_active = FALSE
-            ORDER BY product_id
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-            PreparedStatement stmt = conn.prepareStatement(sql);
-            ResultSet rs = stmt.executeQuery()) {
-
-            while (rs.next()) {
-                Product product = new Product(
-                    rs.getInt("product_id"),
-                    rs.getString("product_name"),
-                    rs.getInt("price_centavos"),
-                    rs.getInt("quantity"),
-                    rs.getInt("low_stock_threshold"),
-                    rs.getBoolean("is_active")
-                );
-
-                products.add(product);
+        for (String[] r : CsvStorage.readAllRows(FILE, HEADERS)) {
+            Product p = mapRow(r);
+            if (!p.isActive()) {
+                products.add(p);
             }
         }
-
+        products.sort(Comparator.comparingInt(Product::getProductId));
         return products;
     }
 
     public void reactivateProduct(int productId) throws SQLException {
-        String sql = """
-            UPDATE products
-            SET is_active = TRUE
-            WHERE product_id = ?
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-            PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setInt(1, productId);
-
-            int rowsUpdated = stmt.executeUpdate();
-
-            if (rowsUpdated == 0) {
-                throw new SQLException("Inactive product not found.");
-            }
-        }
+        setProductActive(productId, true);
     }
 
     public boolean productNameExists(String productName) throws SQLException {
-        String sql = """
-            SELECT COUNT(*)
-            FROM products
-            WHERE LOWER(TRIM(product_name)) = LOWER(TRIM(?))
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-            PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setString(1, productName);
-
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getInt(1) > 0;
-                }
+        String target = productName.trim().toLowerCase();
+        for (String[] r : CsvStorage.readAllRows(FILE, HEADERS)) {
+            if (r[1].trim().toLowerCase().equals(target)) {
+                return true;
             }
         }
-
         return false;
     }
 
     public boolean productNameExistsForOtherProduct(String productName, int productId) throws SQLException {
-
-        String sql = """
-            SELECT COUNT(*)
-            FROM products
-            WHERE LOWER(TRIM(product_name)) = LOWER(TRIM(?))
-            AND product_id != ?
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-            PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setString(1, productName);
-            stmt.setInt(2, productId);
-
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getInt(1) > 0;
-                }
+        String target = productName.trim().toLowerCase();
+        for (String[] r : CsvStorage.readAllRows(FILE, HEADERS)) {
+            if (Integer.parseInt(r[0]) != productId && r[1].trim().toLowerCase().equals(target)) {
+                return true;
             }
         }
-
         return false;
     }
-    
-    public List<Product> getSortedProducts(
-            ProductSortField sortField,
-            SortDirection sortDirection) throws SQLException {
 
-        if (sortField == null || sortDirection == null) {
-            throw new IllegalArgumentException(
-                "Sort field and direction cannot be null."
-            );
-        }
-
-        String column;
-
-        switch (sortField) {
-            case ID -> column = "product_id";
-            case NAME -> column = "product_name";
-            case QUANTITY -> column = "quantity";
-            case PRICE -> column = "price_centavos";
-            default -> throw new IllegalArgumentException(
-                "Invalid sorting field."
-            );
-        }
-
-        String direction = switch (sortDirection) {
-            case ASCENDING -> "ASC";
-            case DESCENDING -> "DESC";
-        };
-
-        String sql = """
-            SELECT * FROM products
-            WHERE is_active = TRUE
-            ORDER BY %s %s, product_id ASC
-            """.formatted(column, direction);
-
-        List<Product> products = new ArrayList<>();
-
-        try (Connection conn = DatabaseConnection.getConnection();
-            PreparedStatement stmt = conn.prepareStatement(sql);
-            ResultSet rs = stmt.executeQuery()) {
-
-            while (rs.next()) {
-                Product product = new Product(
-                    rs.getInt("product_id"),
-                    rs.getString("product_name"),
-                    rs.getInt("price_centavos"),
-                    rs.getInt("quantity"),
-                    rs.getInt("low_stock_threshold"),
-                    rs.getBoolean("is_active")
-                );
-
-                products.add(product);
-            }
-        }
-
+    public List<Product> getSortedProducts(ProductSortField sortField, SortDirection sortDirection) throws SQLException {
+        List<Product> products = getAllProducts();
+        products.sort(buildComparator(sortField, sortDirection));
         return products;
     }
 
-    
     public List<Product> getProductsByStockStatusSorted(
-            StockStatus status,
-            ProductSortField sortField,
-            SortDirection sortDirection) throws SQLException {
-
-        if (status == null || sortField == null || sortDirection == null) {
-            throw new IllegalArgumentException(
-                "Stock status, sort field, and direction cannot be null."
-            );
-        }
-
-        String stockCondition = switch (status) {
-            case IN_STOCK -> "quantity > low_stock_threshold";
-            case LOW_STOCK ->
-                "quantity > 0 AND quantity <= low_stock_threshold";
-            case OUT_OF_STOCK -> "quantity = 0";
-        };
-
-        String column = switch (sortField) {
-            case ID -> "product_id";
-            case NAME -> "product_name";
-            case QUANTITY -> "quantity";
-            case PRICE -> "price_centavos";
-        };
-
-        String direction = switch (sortDirection) {
-            case ASCENDING -> "ASC";
-            case DESCENDING -> "DESC";
-        };
-
-        String sql = """
-            SELECT * FROM products
-            WHERE is_active = TRUE AND %s
-            ORDER BY %s %s, product_id ASC
-            """.formatted(stockCondition, column, direction);
-
-        List<Product> products = new ArrayList<>();
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-
-            while (rs.next()) {
-                Product product = new Product(
-                    rs.getInt("product_id"),
-                    rs.getString("product_name"),
-                    rs.getInt("price_centavos"),
-                    rs.getInt("quantity"),
-                    rs.getInt("low_stock_threshold"),
-                    rs.getBoolean("is_active")
-                );
-
-                products.add(product);
+            StockStatus status, ProductSortField sortField, SortDirection sortDirection) throws SQLException {
+        List<Product> filtered = new ArrayList<>();
+        for (Product p : getAllProducts()) {
+            if (matchesStatus(p, status)) {
+                filtered.add(p);
             }
         }
-
-        return products;
+        filtered.sort(buildComparator(sortField, sortDirection));
+        return filtered;
     }
 
     public List<Product> searchFilterAndSortProducts(
-            String keyword,
-            StockStatus status,
-            ProductSortField sortField,
-            SortDirection sortDirection) throws SQLException {
-
-        if (keyword == null || keyword.isBlank()) {
-            throw new IllegalArgumentException(
-                "Search keyword cannot be empty."
-            );
-        }
-
-        if (status == null || sortField == null || sortDirection == null) {
-            throw new IllegalArgumentException(
-                "Stock status, sort field, and direction are required."
-            );
-        }
-
-        String stockCondition = switch (status) {
-            case IN_STOCK -> "quantity > low_stock_threshold";
-            case LOW_STOCK ->
-                "quantity > 0 AND quantity <= low_stock_threshold";
-            case OUT_OF_STOCK -> "quantity = 0";
-        };
-
-        String column = switch (sortField) {
-            case ID -> "product_id";
-            case NAME -> "product_name";
-            case QUANTITY -> "quantity";
-            case PRICE -> "price_centavos";
-        };
-
-        String direction = switch (sortDirection) {
-            case ASCENDING -> "ASC";
-            case DESCENDING -> "DESC";
-        };
-
-        String sql = """
-            SELECT * FROM products
-            WHERE product_name LIKE ?
-              AND is_active = TRUE
-              AND %s
-            ORDER BY %s %s, product_id ASC
-            """.formatted(stockCondition, column, direction);
-
-        List<Product> products = new ArrayList<>();
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setString(1, "%" + keyword.trim() + "%");
-
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    Product product = new Product(
-                        rs.getInt("product_id"),
-                        rs.getString("product_name"),
-                        rs.getInt("price_centavos"),
-                        rs.getInt("quantity"),
-                        rs.getInt("low_stock_threshold"),
-                        rs.getBoolean("is_active")
-                    );
-
-                    products.add(product);
-                }
+            String keyword, StockStatus status, ProductSortField sortField, SortDirection sortDirection) throws SQLException {
+        String lower = keyword.toLowerCase();
+        List<Product> filtered = new ArrayList<>();
+        for (Product p : getAllProducts()) {
+            if (p.getProductName().toLowerCase().contains(lower) && matchesStatus(p, status)) {
+                filtered.add(p);
             }
         }
-
-        return products;
+        filtered.sort(buildComparator(sortField, sortDirection));
+        return filtered;
     }
 
+    private void setProductActive(int productId, boolean active) throws SQLException {
+        List<String[]> rows = CsvStorage.readAllRows(FILE, HEADERS);
+        boolean found = false;
+        for (String[] r : rows) {
+            if (Integer.parseInt(r[0]) == productId) {
+                r[5] = String.valueOf(active);
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            throw new SQLException("Product not found.");
+        }
+        CsvStorage.writeAllRows(FILE, HEADERS, rows);
+    }
+
+    private boolean matchesStatus(Product p, StockStatus status) {
+        int q = p.getQuantity();
+        int t = p.getLowStockThreshold();
+        return switch (status) {
+            case IN_STOCK -> q > t;
+            case LOW_STOCK -> q > 0 && q <= t;
+            case OUT_OF_STOCK -> q == 0;
+        };
+    }
+
+    private Comparator<Product> buildComparator(ProductSortField sortField, SortDirection sortDirection) {
+        Comparator<Product> cmp = switch (sortField) {
+            case ID -> Comparator.comparingInt(Product::getProductId);
+            case NAME -> Comparator.comparing(Product::getProductName, String.CASE_INSENSITIVE_ORDER);
+            case PRICE -> Comparator.comparingInt(Product::getPriceCentavos);
+            case QUANTITY -> Comparator.comparingInt(Product::getQuantity);
+        };
+        return sortDirection == SortDirection.DESCENDING ? cmp.reversed() : cmp;
+    }
+
+    private Product mapRow(String[] r) {
+        return new Product(
+            Integer.parseInt(r[0]),
+            r[1],
+            Integer.parseInt(r[2]),
+            Integer.parseInt(r[3]),
+            Integer.parseInt(r[4]),
+            Boolean.parseBoolean(r[5])
+        );
+    }
 }

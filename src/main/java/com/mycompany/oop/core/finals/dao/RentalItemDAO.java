@@ -1,84 +1,64 @@
 package com.mycompany.oop.core.finals.dao;
 
 import com.mycompany.oop.core.finals.model.RentalItem;
-import com.mycompany.oop.core.finals.util.DatabaseConnection;
+import com.mycompany.oop.core.finals.util.CsvStorage;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Data-access object for the rental_items table.
- */
 public class RentalItemDAO {
 
+    private static final String FILE = "rental_items.csv";
+    private static final String[] HEADERS = {
+        "rental_item_id", "rental_id", "product_id", "product_name", "quantity", "rental_price_centavos"
+    };
+
     public int addRentalItem(Connection conn, RentalItem item) throws SQLException {
-        String sql = """
-            INSERT INTO rental_items
-              (rental_id, product_id, product_name, quantity, rental_price_centavos)
-            VALUES (?, ?, ?, ?, ?)
-            """;
-
-        try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            ps.setInt(1, item.getRentalId());
-            if (item.getProductId() > 0) {
-                ps.setInt(2, item.getProductId());
-            } else {
-                ps.setNull(2, Types.INTEGER);
-            }
-            ps.setString(3, item.getProductName());
-            ps.setInt(4, item.getQuantity());
-            ps.setInt(5, item.getRentalPriceCentavos());
-            ps.executeUpdate();
-
-            try (ResultSet keys = ps.getGeneratedKeys()) {
-                if (keys.next()) {
-                    int id = keys.getInt(1);
-                    item.setRentalItemId(id);
-                    return id;
-                }
-                throw new SQLException("Insert succeeded but no rental_item_id was returned.");
-            }
-        }
+        List<String[]> rows = CsvStorage.readAllRows(FILE, HEADERS);
+        int id = CsvStorage.nextIntId(rows, 0);
+        item.setRentalItemId(id);
+        rows.add(new String[]{
+            String.valueOf(id),
+            String.valueOf(item.getRentalId()),
+            item.getProductId() > 0 ? String.valueOf(item.getProductId()) : "",
+            CsvStorage.str(item.getProductName()),
+            String.valueOf(item.getQuantity()),
+            String.valueOf(item.getRentalPriceCentavos())
+        });
+        CsvStorage.writeAllRows(FILE, HEADERS, rows);
+        return id;
     }
 
     public int addRentalItem(RentalItem item) throws SQLException {
-        try (Connection conn = DatabaseConnection.getConnection()) {
-            return addRentalItem(conn, item);
-        }
+        return addRentalItem(null, item);
     }
 
     public List<RentalItem> getItemsByRentalId(int rentalId) throws SQLException {
-        String sql = "SELECT * FROM rental_items WHERE rental_id = ? ORDER BY rental_item_id";
         List<RentalItem> items = new ArrayList<>();
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, rentalId);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    int productId = rs.getInt("product_id");
-                    if (rs.wasNull()) {
-                        productId = 0;
-                    }
-                    items.add(new RentalItem(
-                            rs.getInt("rental_item_id"),
-                            rs.getInt("rental_id"),
-                            productId,
-                            rs.getString("product_name"),
-                            rs.getInt("quantity"),
-                            rs.getInt("rental_price_centavos")
-                    ));
-                }
+        for (String[] r : CsvStorage.readAllRows(FILE, HEADERS)) {
+            if (Integer.parseInt(r[1]) == rentalId) {
+                int productId = r[2].isEmpty() ? 0 : Integer.parseInt(r[2]);
+                items.add(new RentalItem(
+                    Integer.parseInt(r[0]),
+                    rentalId,
+                    productId,
+                    r[3],
+                    Integer.parseInt(r[4]),
+                    Integer.parseInt(r[5])
+                ));
             }
         }
         return items;
     }
 
     public boolean deleteItemsByRentalId(Connection conn, int rentalId) throws SQLException {
-        String sql = "DELETE FROM rental_items WHERE rental_id = ?";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, rentalId);
-            return ps.executeUpdate() > 0;
+        List<String[]> rows = CsvStorage.readAllRows(FILE, HEADERS);
+        boolean removed = rows.removeIf(r -> Integer.parseInt(r[1]) == rentalId);
+        if (removed) {
+            CsvStorage.writeAllRows(FILE, HEADERS, rows);
         }
+        return removed;
     }
 }

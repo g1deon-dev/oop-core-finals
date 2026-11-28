@@ -1,692 +1,234 @@
-
 package com.mycompany.oop.core.finals.dao;
 
+import com.mycompany.oop.core.finals.model.Bundle;
+import com.mycompany.oop.core.finals.model.BundleItem;
+import com.mycompany.oop.core.finals.model.Product;
 import com.mycompany.oop.core.finals.model.Sale;
 import com.mycompany.oop.core.finals.model.SaleItem;
-import com.mycompany.oop.core.finals.util.DatabaseConnection;
+import com.mycompany.oop.core.finals.model.StockMovement;
+import com.mycompany.oop.core.finals.util.CsvStorage;
 
-import java.sql.*;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.TreeSet;
 
 public class SaleDAO {
 
-    private record BundleData(
-            String name,
-            long price,
-            List<BundleComponent> components) {
-    }
+    private static final String SALES_FILE = "sales.csv";
+    private static final String[] SALES_HEADERS = {
+        "sale_id", "processed_by", "total_centavos", "sale_date"
+    };
 
-    private record BundleComponent(
-            int productId,
-            int quantityPerBundle) {
-    }
+    private static final String SALE_ITEMS_FILE = "sale_items.csv";
+    private static final String[] SALE_ITEMS_HEADERS = {
+        "sale_item_id", "sale_id", "product_id", "bundle_id",
+        "item_name_snapshot", "price_centavos_snapshot", "quantity", "subtotal_centavos"
+    };
 
-    private record ProductData(
-            String name,
-            int quantity,
-            boolean active,
-            long price) {
-    }
+    private static final String COMP_FILE = "sale_bundle_components.csv";
+    private static final String[] COMP_HEADERS = {
+        "component_id", "sale_item_id", "product_id",
+        "component_name_snapshot", "quantity_per_bundle", "total_deducted_quantity"
+    };
 
-    private record VerifiedComponent(
-            int productId,
-            String productName,
-            int quantityPerBundle,
-            int totalQuantityDeducted) {
-    }
+    private final ProductDAO productDAO = new ProductDAO();
+    private final BundleDAO bundleDAO = new BundleDAO();
+    private final StockMovementDAO movementDAO = new StockMovementDAO();
 
-    private record VerifiedLine(
-            int productId,
-            int bundleId,
-            String name,
-            long price,
-            int quantity,
-            long subtotal,
-            List<VerifiedComponent> components) {
-    }
+    private record VerifiedComponent(int productId, String name, int perBundle, int totalDeducted) {}
+    private record VerifiedLine(int productId, int bundleId, String name, long price, int qty, long subtotal, List<VerifiedComponent> components) {}
 
-    // Creates a sale containing products, bundles, or both.
-    // All stock deductions and sale records share one transaction.
     public long createSale(Sale sale) throws SQLException {
-
         if (sale == null || sale.getItems().isEmpty()) {
-            throw new SQLException(
-                "A sale must contain at least one item."
-            );
+            throw new SQLException("A sale must contain at least one item.");
         }
-
         if (sale.getProcessedBy() <= 0) {
             throw new SQLException("Invalid staff account.");
         }
 
-        String bundleSql = """
-            SELECT bundle_name, price_centavos, is_active
-            FROM bundles
-            WHERE bundle_id = ?
-            FOR UPDATE
-            """;
+        List<SaleItem> requestedItems = sale.getItems();
+        Map<Integer, Bundle> bundles = new HashMap<>();
+        Map<Integer, Long> requiredStock = new TreeMap<>();
 
-        String bundleItemsSql = """
-            SELECT product_id, quantity
-            FROM bundle_items
-            WHERE bundle_id = ?
-            ORDER BY product_id
-            """;
-
-        String productSql = """
-            SELECT product_name, price_centavos,
-                   quantity, is_active
-            FROM products
-            WHERE product_id = ?
-            FOR UPDATE
-            """;
-
-        String saleSql = """
-            INSERT INTO sales (processed_by, total_centavos)
-            VALUES (?, ?)
-            """;
-
-        String saleItemSql = """
-            INSERT INTO sale_items
-            (sale_id, product_id, bundle_id, product_name,
-             unit_price_centavos, quantity, subtotal_centavos)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """;
-
-        String componentSql = """
-            INSERT INTO sale_bundle_components
-            (sale_item_id, product_id, product_name,
-             quantity_per_bundle, total_quantity_deducted)
-            VALUES (?, ?, ?, ?, ?)
-            """;
-
-        String stockSql = """
-            UPDATE products
-            SET quantity = quantity - ?
-            WHERE product_id = ?
-            AND quantity >= ?
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection()) {
-
-            conn.setAutoCommit(false);
-
-            try {
-                List<SaleItem> requestedItems = sale.getItems();
-
-                TreeSet<Integer> bundleIds = new TreeSet<>();
-                TreeSet<Integer> productIds = new TreeSet<>();
-
-                // Validate sale lines and collect IDs.
-                for (SaleItem item : requestedItems) {
-
-                    if (item == null || item.getQuantity() <= 0) {
-                        throw new SQLException("Invalid sale item.");
+        for (SaleItem item : requestedItems) {
+            if (item == null || item.getQuantity() <= 0) {
+                throw new SQLException("Invalid sale item.");
+            }
+            boolean validProduct = item.getProductId() > 0 && item.getBundleId() == 0;
+            boolean validBundle = item.getBundleId() > 0 && item.getProductId() == 0;
+            if (!validProduct && !validBundle) {
+                throw new SQLException("A sale item must represent exactly one product or bundle.");
+            }
+            if (validProduct) {
+                requiredStock.put(item.getProductId(),
+                    Math.addExact(requiredStock.getOrDefault(item.getProductId(), 0L), item.getQuantity()));
+            } else {
+                Bundle b = bundles.get(item.getBundleId());
+                if (b == null) {
+                    b = bundleDAO.getBundleById(item.getBundleId());
+                    if (b == null) {
+                        throw new SQLException("Bundle not found: " + item.getBundleId());
                     }
-
-                    boolean validProduct =
-                        item.getProductId() > 0
-                        && item.getBundleId() == 0;
-
-                    boolean validBundle =
-                        item.getBundleId() > 0
-                        && item.getProductId() == 0;
-
-                    if (!validProduct && !validBundle) {
-                        throw new SQLException(
-                            "A sale item must represent exactly "
-                            + "one product or bundle."
-                        );
+                    if (!b.isActive()) {
+                        throw new SQLException("Bundle " + b.getBundleName() + " is inactive.");
                     }
-
-                    if (validProduct) {
-                        productIds.add(item.getProductId());
-                    } else {
-                        bundleIds.add(item.getBundleId());
+                    if (b.getItems().isEmpty()) {
+                        throw new SQLException("Bundle " + b.getBundleId() + " has no components.");
                     }
+                    bundles.put(b.getBundleId(), b);
                 }
-
-                // Lock and retrieve bundles in ascending ID order.
-                Map<Integer, BundleData> bundles = new HashMap<>();
-
-                try (PreparedStatement stmt =
-                         conn.prepareStatement(bundleSql)) {
-
-                    for (int bundleId : bundleIds) {
-
-                        stmt.setInt(1, bundleId);
-
-                        try (ResultSet rs = stmt.executeQuery()) {
-
-                            if (!rs.next()) {
-                                throw new SQLException(
-                                    "Bundle not found: " + bundleId
-                                );
-                            }
-
-                            String name = rs.getString("bundle_name");
-                            long price = rs.getLong("price_centavos");
-                            boolean active = rs.getBoolean("is_active");
-
-                            if (!active) {
-                                throw new SQLException(
-                                    "Bundle " + name + " is inactive."
-                                );
-                            }
-
-                            bundles.put(
-                                bundleId,
-                                new BundleData(
-                                    name, price, new ArrayList<>()
-                                )
-                            );
-                        }
-                    }
+                for (BundleItem bi : b.getItems()) {
+                    long compQty = Math.multiplyExact((long) bi.getQuantity(), item.getQuantity());
+                    requiredStock.put(bi.getProductId(),
+                        Math.addExact(requiredStock.getOrDefault(bi.getProductId(), 0L), compQty));
                 }
-
-                // Retrieve the component products of each bundle.
-                try (PreparedStatement stmt =
-                         conn.prepareStatement(bundleItemsSql)) {
-
-                    for (int bundleId : bundleIds) {
-
-                        stmt.setInt(1, bundleId);
-
-                        List<BundleComponent> components =
-                            new ArrayList<>();
-
-                        try (ResultSet rs = stmt.executeQuery()) {
-
-                            while (rs.next()) {
-
-                                int productId =
-                                    rs.getInt("product_id");
-
-                                int quantity =
-                                    rs.getInt("quantity");
-
-                                if (productId <= 0 || quantity <= 0) {
-                                    throw new SQLException(
-                                        "Invalid component in bundle "
-                                        + bundleId
-                                    );
-                                }
-
-                                components.add(
-                                    new BundleComponent(
-                                        productId, quantity
-                                    )
-                                );
-
-                                productIds.add(productId);
-                            }
-                        }
-
-                        if (components.isEmpty()) {
-                            throw new SQLException(
-                                "Bundle " + bundleId
-                                + " has no components."
-                            );
-                        }
-
-                        BundleData old = bundles.get(bundleId);
-
-                        bundles.put(
-                            bundleId,
-                            new BundleData(
-                                old.name(),
-                                old.price(),
-                                components
-                            )
-                        );
-                    }
-                }
-
-                // Calculate combined stock requirements.
-                // TreeMap ensures products are locked in ascending ID order.
-                Map<Integer, Long> requiredStock = new TreeMap<>();
-
-                for (SaleItem item : requestedItems) {
-
-                    if (!item.isBundle()) {
-
-                        int productId = item.getProductId();
-
-                        long required = Math.addExact(
-                            requiredStock.getOrDefault(productId, 0L),
-                            item.getQuantity()
-                        );
-
-                        requiredStock.put(productId, required);
-
-                    } else {
-
-                        BundleData bundle =
-                            bundles.get(item.getBundleId());
-
-                        for (BundleComponent component
-                                : bundle.components()) {
-
-                            long componentQuantity =
-                                Math.multiplyExact(
-                                    (long) component.quantityPerBundle(),
-                                    item.getQuantity()
-                                );
-
-                            long required = Math.addExact(
-                                requiredStock.getOrDefault(
-                                    component.productId(), 0L
-                                ),
-                                componentQuantity
-                            );
-
-                            requiredStock.put(
-                                component.productId(), required
-                            );
-                        }
-                    }
-                }
-
-                // Lock and validate all required products.
-                Map<Integer, ProductData> products = new HashMap<>();
-
-                try (PreparedStatement stmt =
-                         conn.prepareStatement(productSql)) {
-
-                    for (Map.Entry<Integer, Long> entry
-                            : requiredStock.entrySet()) {
-
-                        int productId = entry.getKey();
-                        long required = entry.getValue();
-
-                        if (required > Integer.MAX_VALUE) {
-                            throw new SQLException(
-                                "Required stock quantity is too large."
-                            );
-                        }
-
-                        stmt.setInt(1, productId);
-
-                        try (ResultSet rs = stmt.executeQuery()) {
-
-                            if (!rs.next()) {
-                                throw new SQLException(
-                                    "Product not found: " + productId
-                                );
-                            }
-
-                            String name =
-                                rs.getString("product_name");
-
-                            long price =
-                                rs.getLong("price_centavos");
-
-                            int available =
-                                rs.getInt("quantity");
-
-                            boolean active =
-                                rs.getBoolean("is_active");
-
-                            if (!active) {
-                                throw new SQLException(
-                                    name + " is inactive."
-                                );
-                            }
-
-                            if (required > available) {
-                                throw new SQLException(
-                                    "Insufficient stock for " + name
-                                    + ". Required: " + required
-                                    + ", Available: " + available
-                                );
-                            }
-
-                            products.put(
-                                productId,
-                                new ProductData(
-                                    name, available, active, price
-                                )
-                            );
-                        }
-                    }
-                }
-
-                // Verify sale lines using database prices and names.
-                List<VerifiedLine> verifiedItems = new ArrayList<>();
-
-                long totalCentavos = 0;
-
-                for (SaleItem item : requestedItems) {
-
-                    int productId = item.getProductId();
-                    int bundleId = item.getBundleId();
-
-                    String name;
-                    long price;
-                    List<VerifiedComponent> snapshots =
-                        new ArrayList<>();
-
-                    if (!item.isBundle()) {
-
-                        ProductData product = products.get(productId);
-
-                        name = product.name();
-                        price = product.price();
-
-                    } else {
-
-                        BundleData bundle = bundles.get(bundleId);
-
-                        name = bundle.name();
-                        price = bundle.price();
-
-                        for (BundleComponent component
-                                : bundle.components()) {
-
-                            ProductData product =
-                                products.get(component.productId());
-
-                            long totalQuantity = Math.multiplyExact(
-                                (long) component.quantityPerBundle(),
-                                item.getQuantity()
-                            );
-
-                            snapshots.add(
-                                new VerifiedComponent(
-                                    component.productId(),
-                                    product.name(),
-                                    component.quantityPerBundle(),
-                                    Math.toIntExact(totalQuantity)
-                                )
-                            );
-                        }
-                    }
-
-                    long subtotal = Math.multiplyExact(
-                        price, item.getQuantity()
-                    );
-
-                    totalCentavos = Math.addExact(
-                        totalCentavos, subtotal
-                    );
-
-                    verifiedItems.add(
-                        new VerifiedLine(
-                            productId,
-                            bundleId,
-                            name,
-                            price,
-                            item.getQuantity(),
-                            subtotal,
-                            snapshots
-                        )
-                    );
-                }
-
-                // Insert the sale header.
-                long saleId;
-
-                try (PreparedStatement stmt = conn.prepareStatement(
-                        saleSql, Statement.RETURN_GENERATED_KEYS)) {
-
-                    stmt.setInt(1, sale.getProcessedBy());
-                    stmt.setLong(2, totalCentavos);
-
-                    stmt.executeUpdate();
-
-                    try (ResultSet keys = stmt.getGeneratedKeys()) {
-
-                        if (!keys.next()) {
-                            throw new SQLException(
-                                "Failed to create sale record."
-                            );
-                        }
-
-                        saleId = keys.getLong(1);
-                    }
-                }
-
-                // Insert sale lines and bundle component snapshots.
-                try (PreparedStatement itemStmt =
-                         conn.prepareStatement(
-                             saleItemSql,
-                             Statement.RETURN_GENERATED_KEYS
-                         );
-                     PreparedStatement componentStmt =
-                         conn.prepareStatement(componentSql)) {
-
-                    for (VerifiedLine item : verifiedItems) {
-
-                        itemStmt.setLong(1, saleId);
-
-                        if (item.bundleId() > 0) {
-                            itemStmt.setNull(2, Types.INTEGER);
-                            itemStmt.setInt(3, item.bundleId());
-                        } else {
-                            itemStmt.setInt(2, item.productId());
-                            itemStmt.setNull(3, Types.INTEGER);
-                        }
-
-                        itemStmt.setString(4, item.name());
-                        itemStmt.setLong(5, item.price());
-                        itemStmt.setInt(6, item.quantity());
-                        itemStmt.setLong(7, item.subtotal());
-
-                        itemStmt.executeUpdate();
-
-                        if (item.bundleId() > 0) {
-
-                            long saleItemId;
-
-                            try (ResultSet keys =
-                                     itemStmt.getGeneratedKeys()) {
-
-                                if (!keys.next()) {
-                                    throw new SQLException(
-                                        "Failed to create bundle sale item."
-                                    );
-                                }
-
-                                saleItemId = keys.getLong(1);
-                            }
-
-                            for (VerifiedComponent component
-                                    : item.components()) {
-
-                                componentStmt.setLong(1, saleItemId);
-                                componentStmt.setInt(
-                                    2, component.productId()
-                                );
-                                componentStmt.setString(
-                                    3, component.productName()
-                                );
-                                componentStmt.setInt(
-                                    4, component.quantityPerBundle()
-                                );
-                                componentStmt.setInt(
-                                    5, component.totalQuantityDeducted()
-                                );
-
-                                componentStmt.executeUpdate();
-                            }
-                        }
-                    }
-                }
-
-                // Deduct all required product stock.
-                try (PreparedStatement stmt =
-                         conn.prepareStatement(stockSql)) {
-
-                    for (Map.Entry<Integer, Long> entry
-                            : requiredStock.entrySet()) {
-
-                        int quantity = Math.toIntExact(entry.getValue());
-                        int productId = entry.getKey();
-
-                        stmt.setInt(1, quantity);
-                        stmt.setInt(2, productId);
-                        stmt.setInt(3, quantity);
-
-                        if (stmt.executeUpdate() != 1) {
-                            throw new SQLException(
-                                "Failed to update stock for product "
-                                + productId
-                            );
-                        }
-                    }
-                }
-
-                conn.commit();
-
-                return saleId;
-
-            } catch (SQLException | RuntimeException ex) {
-
-                try {
-                    conn.rollback();
-                } catch (SQLException rollbackError) {
-                    ex.addSuppressed(rollbackError);
-                }
-
-                if (ex instanceof ArithmeticException) {
-                    throw new SQLException(
-                        "Sale amount or quantity is too large.", ex
-                    );
-                }
-
-                throw ex;
             }
         }
+
+        Map<Integer, Product> products = new HashMap<>();
+        for (Map.Entry<Integer, Long> entry : requiredStock.entrySet()) {
+            int pid = entry.getKey();
+            long req = entry.getValue();
+            if (req > Integer.MAX_VALUE) {
+                throw new SQLException("Required stock quantity is too large.");
+            }
+            Product p = productDAO.getProductById(pid);
+            if (p == null) {
+                throw new SQLException("Product not found: " + pid);
+            }
+            if (!p.isActive()) {
+                throw new SQLException(p.getProductName() + " is inactive.");
+            }
+            if (req > p.getQuantity()) {
+                throw new SQLException("Insufficient stock for " + p.getProductName()
+                    + ". Required: " + req + ", Available: " + p.getQuantity());
+            }
+            products.put(pid, p);
+        }
+
+        List<VerifiedLine> verified = new ArrayList<>();
+        long totalCentavos = 0;
+        for (SaleItem item : requestedItems) {
+            if (!item.isBundle()) {
+                Product p = products.get(item.getProductId());
+                long sub = Math.multiplyExact((long) p.getPriceCentavos(), item.getQuantity());
+                totalCentavos = Math.addExact(totalCentavos, sub);
+                verified.add(new VerifiedLine(p.getProductId(), 0, p.getProductName(), p.getPriceCentavos(), item.getQuantity(), sub, List.of()));
+            } else {
+                Bundle b = bundles.get(item.getBundleId());
+                List<VerifiedComponent> comps = new ArrayList<>();
+                for (BundleItem bi : b.getItems()) {
+                    Product p = products.get(bi.getProductId());
+                    int totalDeducted = Math.toIntExact(Math.multiplyExact((long) bi.getQuantity(), item.getQuantity()));
+                    comps.add(new VerifiedComponent(p.getProductId(), p.getProductName(), bi.getQuantity(), totalDeducted));
+                }
+                long sub = Math.multiplyExact(b.getPriceCentavos(), item.getQuantity());
+                totalCentavos = Math.addExact(totalCentavos, sub);
+                verified.add(new VerifiedLine(0, b.getBundleId(), b.getBundleName(), b.getPriceCentavos(), item.getQuantity(), sub, comps));
+            }
+        }
+
+        // Write sale header
+        List<String[]> saleRows = CsvStorage.readAllRows(SALES_FILE, SALES_HEADERS);
+        long saleId = CsvStorage.nextLongId(saleRows, 0);
+        saleRows.add(new String[]{
+            String.valueOf(saleId),
+            String.valueOf(sale.getProcessedBy()),
+            String.valueOf(totalCentavos),
+            LocalDateTime.now().toString()
+        });
+        CsvStorage.writeAllRows(SALES_FILE, SALES_HEADERS, saleRows);
+
+        // Write sale items & components
+        List<String[]> itemRows = CsvStorage.readAllRows(SALE_ITEMS_FILE, SALE_ITEMS_HEADERS);
+        List<String[]> compRows = CsvStorage.readAllRows(COMP_FILE, COMP_HEADERS);
+        long nextItemId = CsvStorage.nextLongId(itemRows, 0);
+        long nextCompId = CsvStorage.nextLongId(compRows, 0);
+
+        for (VerifiedLine line : verified) {
+            long saleItemId = nextItemId++;
+            itemRows.add(new String[]{
+                String.valueOf(saleItemId),
+                String.valueOf(saleId),
+                line.bundleId() > 0 ? "" : String.valueOf(line.productId()),
+                line.bundleId() > 0 ? String.valueOf(line.bundleId()) : "",
+                line.name(),
+                String.valueOf(line.price()),
+                String.valueOf(line.qty()),
+                String.valueOf(line.subtotal())
+            });
+            for (VerifiedComponent vc : line.components()) {
+                compRows.add(new String[]{
+                    String.valueOf(nextCompId++),
+                    String.valueOf(saleItemId),
+                    String.valueOf(vc.productId()),
+                    vc.name(),
+                    String.valueOf(vc.perBundle()),
+                    String.valueOf(vc.totalDeducted())
+                });
+            }
+        }
+        CsvStorage.writeAllRows(SALE_ITEMS_FILE, SALE_ITEMS_HEADERS, itemRows);
+        CsvStorage.writeAllRows(COMP_FILE, COMP_HEADERS, compRows);
+
+        // Deduct stock and record audit movement
+        for (Map.Entry<Integer, Long> entry : requiredStock.entrySet()) {
+            int qty = Math.toIntExact(entry.getValue());
+            int pid = entry.getKey();
+            productDAO.adjustStock(null, pid, -qty);
+            movementDAO.recordMovement(new StockMovement(pid, -qty, "SALE", saleId, sale.getProcessedBy()));
+        }
+
+        return saleId;
     }
 
-    // Retrieves one sale and all its items.
     public Sale getSaleById(long saleId) throws SQLException {
-
-        String sql = """
-            SELECT sale_id, processed_by,
-                   total_centavos, sale_date
-            FROM sales
-            WHERE sale_id = ?
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setLong(1, saleId);
-
-            try (ResultSet rs = stmt.executeQuery()) {
-
-                if (!rs.next()) {
-                    return null;
-                }
-
-                return buildSale(conn, rs);
+        for (Sale s : getAllSales()) {
+            if (s.getSaleId() == saleId) {
+                return s;
             }
         }
+        return null;
     }
 
-    // Retrieves all sales, newest first.
     public List<Sale> getAllSales() throws SQLException {
+        List<String[]> saleRows = CsvStorage.readAllRows(SALES_FILE, SALES_HEADERS);
+        List<String[]> itemRows = CsvStorage.readAllRows(SALE_ITEMS_FILE, SALE_ITEMS_HEADERS);
+
+        Map<Long, List<SaleItem>> itemsBySale = new HashMap<>();
+        for (String[] ir : itemRows) {
+            long saleId = Long.parseLong(ir[1]);
+            int productId = ir[2].isEmpty() ? 0 : Integer.parseInt(ir[2]);
+            int bundleId = ir[3].isEmpty() ? 0 : Integer.parseInt(ir[3]);
+            itemsBySale.computeIfAbsent(saleId, k -> new ArrayList<>()).add(new SaleItem(
+                Long.parseLong(ir[0]),
+                saleId,
+                productId,
+                bundleId,
+                ir[4],
+                Long.parseLong(ir[5]),
+                Integer.parseInt(ir[6]),
+                Long.parseLong(ir[7])
+            ));
+        }
 
         List<Sale> sales = new ArrayList<>();
-
-        String sql = """
-            SELECT sale_id, processed_by,
-                   total_centavos, sale_date
-            FROM sales
-            ORDER BY sale_date DESC, sale_id DESC
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-
-            while (rs.next()) {
-
-                long id = rs.getLong("sale_id");
-                int processedBy = rs.getInt("processed_by");
-                long total = rs.getLong("total_centavos");
-
-                Timestamp timestamp = rs.getTimestamp("sale_date");
-
-                LocalDateTime date = timestamp.toLocalDateTime();
-
-                List<SaleItem> items = getSaleItems(conn, id);
-
-                sales.add(new Sale(
-                    id, processedBy, total, date, items
-                ));
-            }
+        for (String[] sr : saleRows) {
+            long id = Long.parseLong(sr[0]);
+            sales.add(new Sale(
+                id,
+                Integer.parseInt(sr[1]),
+                Long.parseLong(sr[2]),
+                CsvStorage.parseNullableDateTime(sr[3]),
+                itemsBySale.getOrDefault(id, List.of())
+            ));
         }
-
+        Collections.reverse(sales);
         return sales;
-    }
-
-    // Retrieves all items belonging to a particular sale.
-    private List<SaleItem> getSaleItems(
-            Connection conn, long saleId) throws SQLException {
-
-        List<SaleItem> items = new ArrayList<>();
-
-        String sql = """
-            SELECT sale_item_id, sale_id, product_id, bundle_id,
-                   product_name, unit_price_centavos,
-                   quantity, subtotal_centavos
-            FROM sale_items
-            WHERE sale_id = ?
-            ORDER BY sale_item_id
-            """;
-
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setLong(1, saleId);
-
-            try (ResultSet rs = stmt.executeQuery()) {
-
-                while (rs.next()) {
-
-                    int productId = rs.getInt("product_id");
-                    int bundleId = rs.getInt("bundle_id");
-
-                    items.add(new SaleItem(
-                        rs.getLong("sale_item_id"),
-                        rs.getLong("sale_id"),
-                        productId,
-                        bundleId,
-                        rs.getString("product_name"),
-                        rs.getLong("unit_price_centavos"),
-                        rs.getInt("quantity"),
-                        rs.getLong("subtotal_centavos")
-                    ));
-                }
-            }
-        }
-
-        return items;
-    }
-
-    // Builds a complete Sale object from a database result.
-    private Sale buildSale(
-            Connection conn, ResultSet rs) throws SQLException {
-
-        long saleId = rs.getLong("sale_id");
-        int processedBy = rs.getInt("processed_by");
-        long total = rs.getLong("total_centavos");
-
-        Timestamp timestamp = rs.getTimestamp("sale_date");
-
-        LocalDateTime date = timestamp.toLocalDateTime();
-
-        List<SaleItem> items = getSaleItems(conn, saleId);
-
-        return new Sale(
-            saleId, processedBy, total, date, items
-        );
     }
 }

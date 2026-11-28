@@ -9,9 +9,7 @@ import com.mycompany.oop.core.finals.model.StockChangeStatus;
 import com.mycompany.oop.core.finals.model.StockMovement;
 import com.mycompany.oop.core.finals.security.AuthorizationService;
 import com.mycompany.oop.core.finals.security.UserSession;
-import com.mycompany.oop.core.finals.util.DatabaseConnection;
 
-import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -95,25 +93,14 @@ public class InventoryService {
 
         int currentUserId = session.getCurrentUser().getUserId();
 
-        try (Connection conn = DatabaseConnection.getConnection()) {
-            conn.setAutoCommit(false);
-            try {
-                productDAO.adjustStock(conn, productId, delta);
-                movementDAO.recordMovement(conn, new StockMovement(
-                    productId,
-                    delta,
-                    finalReason,
-                    null,
-                    currentUserId
-                ));
-                conn.commit();
-            } catch (SQLException e) {
-                conn.rollback();
-                throw e;
-            } finally {
-                conn.setAutoCommit(true);
-            }
-        }
+        productDAO.adjustStock(null, productId, delta);
+        movementDAO.recordMovement(null, new StockMovement(
+            productId,
+            delta,
+            finalReason,
+            null,
+            currentUserId
+        ));
     }
 
     // Add a product and record its creation in the Audit Log
@@ -243,33 +230,16 @@ public class InventoryService {
 
         int currentUserId = session.getCurrentUser().getUserId();
 
-        try (Connection conn = DatabaseConnection.getConnection()) {
-            conn.setAutoCommit(false);
-            try {
-                // Update product quantity
-                productDAO.restockProduct(request.getProductId(), request.getRequestedQuantity());
-
-                // Record stock movement
-                StockMovement movement = new StockMovement(
-                    request.getProductId(),
-                    request.getRequestedQuantity(),
-                    "REQUEST_FULFILLED",
-                    (long) requestId,
-                    currentUserId
-                );
-                movementDAO.recordMovement(conn, movement);
-
-                // Update request status to RECEIVED
-                requestDAO.updateStatus(requestId, StockChangeStatus.RECEIVED, currentUserId, "Received into inventory");
-
-                conn.commit();
-            } catch (SQLException e) {
-                conn.rollback();
-                throw e;
-            } finally {
-                conn.setAutoCommit(true);
-            }
-        }
+        productDAO.restockProduct(request.getProductId(), request.getRequestedQuantity());
+        StockMovement movement = new StockMovement(
+            request.getProductId(),
+            request.getRequestedQuantity(),
+            "REQUEST_FULFILLED",
+            (long) requestId,
+            currentUserId
+        );
+        movementDAO.recordMovement(null, movement);
+        requestDAO.updateStatus(requestId, StockChangeStatus.RECEIVED, currentUserId, "Received into inventory");
     }
 
     // Cancel a pending request by the requester

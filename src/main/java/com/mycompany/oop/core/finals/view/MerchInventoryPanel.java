@@ -5,7 +5,10 @@
 package com.mycompany.oop.core.finals.view;
 
 import com.mycompany.oop.core.finals.model.Product;
+import com.mycompany.oop.core.finals.model.ProductSortField;
+import com.mycompany.oop.core.finals.model.SortDirection;
 import com.mycompany.oop.core.finals.model.StockMovement;
+import com.mycompany.oop.core.finals.model.StockStatus;
 import com.mycompany.oop.core.finals.model.UserRole;
 import com.mycompany.oop.core.finals.security.AuthorizationService;
 import com.mycompany.oop.core.finals.security.UserSession;
@@ -44,6 +47,9 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
     private ProductService productService;
     private InventoryService inventoryService;
     private final javax.swing.JButton btnAuditLog = new javax.swing.JButton("Audit Log");
+    private final JComboBox<String> cmbStockFilter = new JComboBox<>(new String[]{"All Statuses", "IN STOCK", "LOW STOCK", "OUT OF STOCK"});
+    private final JComboBox<String> cmbSortField = new JComboBox<>(new String[]{"Default Order", "Name", "Price", "Quantity"});
+    private final JComboBox<String> cmbSortDir = new JComboBox<>(new String[]{"ASC", "DESC"});
 
     /**
      * Creates new form MerchInventoryPanel
@@ -73,11 +79,9 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
         lblUsername.setText(session.getCurrentUser().getFullName());
         lblUsername1.setText(session.getCurrentUser().getRole().name());
 
-        UserRole role = session.getCurrentUser().getRole();
-        boolean isAdmin = (role == UserRole.CHAIRPERSON || role == UserRole.BUSINESS_MANAGER);
-        btnAddProduct.setEnabled(isAdmin);
-        btnEdit.setEnabled(isAdmin);
-        btnDeactivate.setEnabled(isAdmin);
+        btnAddProduct.setEnabled(true);
+        btnEdit.setEnabled(true);
+        btnDeactivate.setEnabled(true);
 
         refreshData();
     }
@@ -85,8 +89,14 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
     private void setupListeners() {
         btnSearch.addActionListener(e -> searchProducts());
         txtSearch.addActionListener(e -> searchProducts());
+        cmbStockFilter.addActionListener(e -> applyFiltersAndSort());
+        cmbSortField.addActionListener(e -> applyFiltersAndSort());
+        cmbSortDir.addActionListener(e -> applyFiltersAndSort());
         btnRefresh.addActionListener(e -> {
             txtSearch.setText("");
+            cmbStockFilter.setSelectedIndex(0);
+            cmbSortField.setSelectedIndex(0);
+            cmbSortDir.setSelectedIndex(0);
             refreshData();
         });
         btnAddProduct.addActionListener(e -> handleAddProduct());
@@ -104,7 +114,7 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
     private void setupTableContextMenu() {
         JPopupMenu menu = new JPopupMenu();
 
-        JMenuItem miRestockOrRequest = new JMenuItem("Adjust Stock (+/-) / Request Change");
+        JMenuItem miRestockOrRequest = new JMenuItem("Adjust Stock (+/-)");
         miRestockOrRequest.addActionListener(e -> handleRestockOrRequest());
 
         JMenuItem miMovements = new JMenuItem("View Stock Movement History");
@@ -286,7 +296,7 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
         tblProducts.getColumnModel().getColumn(4).setPreferredWidth(140);  // Low Stock Threshold
         tblProducts.getColumnModel().getColumn(5).setPreferredWidth(110);  // Stock Status
 
-        // ── Product Management toolbar: add Audit Log button ─────────────────
+        // ── Product Management toolbar: add Audit Log and Filter/Sort controls ──
         btnAuditLog.setBackground(new java.awt.Color(191, 205, 221));
         btnAuditLog.setFont(new java.awt.Font("Segoe UI Historic", java.awt.Font.BOLD, 12));
         btnAuditLog.setForeground(new java.awt.Color(9, 30, 57));
@@ -312,7 +322,13 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addComponent(btnAuditLog))
                     .addGroup(toolbarLayout.createSequentialGroup()
-                        .addComponent(txtSearch, javax.swing.GroupLayout.PREFERRED_SIZE, 831, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addComponent(txtSearch, javax.swing.GroupLayout.PREFERRED_SIZE, 480, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(cmbStockFilter, javax.swing.GroupLayout.PREFERRED_SIZE, 130, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(cmbSortField, javax.swing.GroupLayout.PREFERRED_SIZE, 125, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(cmbSortDir, javax.swing.GroupLayout.PREFERRED_SIZE, 75, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addComponent(btnSearch, javax.swing.GroupLayout.PREFERRED_SIZE, 113, javax.swing.GroupLayout.PREFERRED_SIZE))
                     .addComponent(jScrollPane1))
@@ -326,6 +342,9 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                 .addGroup(toolbarLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(txtSearch, javax.swing.GroupLayout.PREFERRED_SIZE, 32, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(cmbStockFilter, javax.swing.GroupLayout.PREFERRED_SIZE, 32, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(cmbSortField, javax.swing.GroupLayout.PREFERRED_SIZE, 32, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(cmbSortDir, javax.swing.GroupLayout.PREFERRED_SIZE, 32, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addComponent(btnSearch, javax.swing.GroupLayout.PREFERRED_SIZE, 32, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(toolbarLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
@@ -372,16 +391,48 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
     }
 
     private void searchProducts() {
+        applyFiltersAndSort();
+    }
+
+    private void applyFiltersAndSort() {
         if (!ensureConnected()) {
             return;
         }
         String keyword = txtSearch.getText();
-        if (keyword == null || keyword.isBlank()) {
-            refreshData();
-            return;
-        }
+        boolean hasKeyword = keyword != null && !keyword.isBlank();
+
+        StockStatus status = switch (cmbStockFilter.getSelectedIndex()) {
+            case 1 -> StockStatus.IN_STOCK;
+            case 2 -> StockStatus.LOW_STOCK;
+            case 3 -> StockStatus.OUT_OF_STOCK;
+            default -> null;
+        };
+
+        ProductSortField sortField = switch (cmbSortField.getSelectedIndex()) {
+            case 1 -> ProductSortField.NAME;
+            case 2 -> ProductSortField.PRICE;
+            case 3 -> ProductSortField.QUANTITY;
+            default -> null;
+        };
+        SortDirection sortDir = cmbSortDir.getSelectedIndex() == 1 ? SortDirection.DESCENDING : SortDirection.ASCENDING;
+
         try {
-            populateTable(productService.searchProducts(keyword));
+            List<Product> results;
+            if (hasKeyword && status != null) {
+                ProductSortField effectiveSort = sortField != null ? sortField : ProductSortField.NAME;
+                results = productService.searchFilterAndSortProducts(keyword, status, effectiveSort, sortDir);
+            } else if (hasKeyword) {
+                results = productService.searchProducts(keyword);
+            } else if (status != null && sortField != null) {
+                results = productService.getProductsByStockStatusSorted(status, sortField, sortDir);
+            } else if (status != null) {
+                results = productService.getProductsByStockStatus(status);
+            } else if (sortField != null) {
+                results = productService.getSortedProducts(sortField, sortDir);
+            } else {
+                results = productService.getAllProducts();
+            }
+            populateTable(results);
         } catch (SecurityException | IllegalArgumentException | SQLException ex) {
             showError(ex.getMessage());
         }
@@ -503,18 +554,15 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
             return;
         }
 
-        UserRole role = session.getCurrentUser().getRole();
-        boolean isAdmin = (role == UserRole.CHAIRPERSON || role == UserRole.BUSINESS_MANAGER);
-
         JTextField qtyField = new JTextField("1");
         JTextField reasonField = new JTextField();
         JPanel form = new JPanel(new GridLayout(0, 2, 8, 8));
-        form.add(new JLabel(isAdmin ? "Adjust Qty (+ add / - subtract):" : "Requested Quantity:"));
+        form.add(new JLabel("Adjust Qty (+ add / - subtract):"));
         form.add(qtyField);
-        form.add(new JLabel(isAdmin ? "Reason (optional):" : "Reason:"));
+        form.add(new JLabel("Reason (optional):"));
         form.add(reasonField);
 
-        String title = isAdmin ? "Adjust Stock — Product #" + productId : "Request Stock Change #" + productId;
+        String title = "Adjust Stock — Product #" + productId;
         int result = JOptionPane.showConfirmDialog(this, form, title, JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
         if (result != JOptionPane.OK_OPTION) {
             return;
@@ -522,15 +570,10 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
 
         try {
             int qty = Integer.parseInt(qtyField.getText().trim());
-            if (isAdmin) {
-                inventoryService.adjustStock(productId, qty, reasonField.getText());
-                refreshData();
-                String verb = qty > 0 ? ("Added +" + qty) : ("Deducted " + qty);
-                JOptionPane.showMessageDialog(this, verb + " units.", "Stock Updated", JOptionPane.INFORMATION_MESSAGE);
-            } else {
-                int reqId = inventoryService.submitStockChangeRequest(productId, qty, reasonField.getText());
-                JOptionPane.showMessageDialog(this, "Stock-change request #" + reqId + " submitted for approval.", "Request Submitted", JOptionPane.INFORMATION_MESSAGE);
-            }
+            inventoryService.adjustStock(productId, qty, reasonField.getText());
+            refreshData();
+            String verb = qty > 0 ? ("Added +" + qty) : ("Deducted " + qty);
+            JOptionPane.showMessageDialog(this, verb + " units.", "Stock Updated", JOptionPane.INFORMATION_MESSAGE);
         } catch (NumberFormatException nfe) {
             showError("Quantity must be a valid integer.");
         } catch (SecurityException | IllegalArgumentException | SQLException ex) {
@@ -1251,7 +1294,7 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
         JTextField usernameField = new JTextField();
         JTextField fullNameField = new JTextField();
         JPasswordField passwordField = new JPasswordField();
-        JComboBox<UserRole> roleBox = new JComboBox<>(UserRole.values());
+        JComboBox<UserRole> roleBox = new JComboBox<>(new UserRole[]{UserRole.CHAIRPERSON, UserRole.BUSINESS_MANAGER});
 
         JPanel form = new JPanel(new GridLayout(0, 2, 8, 8));
         form.add(new JLabel("Username:"));

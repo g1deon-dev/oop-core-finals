@@ -1,102 +1,87 @@
 package com.mycompany.oop.core.finals.dao;
 
 import com.mycompany.oop.core.finals.model.RentalPayment;
-import com.mycompany.oop.core.finals.util.DatabaseConnection;
+import com.mycompany.oop.core.finals.util.CsvStorage;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
-/**
- * Data-access object for the rental_payments table.
- */
 public class RentalPaymentDAO {
 
+    private static final String FILE = "rental_payments.csv";
+    private static final String[] HEADERS = {
+        "payment_id", "rental_id", "amount_centavos", "payment_method", "payment_date", "payment_status"
+    };
+
     public int createPayment(Connection conn, RentalPayment payment) throws SQLException {
-        String sql = """
-            INSERT INTO rental_payments
-              (rental_id, amount_centavos, payment_method, payment_date, payment_status)
-            VALUES (?, ?, ?, ?, ?)
-            """;
-
-        try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            ps.setInt(1, payment.getRentalId());
-            ps.setInt(2, payment.getAmountCentavos());
-            ps.setString(3, payment.getPaymentMethod());
-            if (payment.getPaymentDate() != null) {
-                ps.setTimestamp(4, Timestamp.valueOf(payment.getPaymentDate()));
-            } else {
-                ps.setNull(4, Types.TIMESTAMP);
-            }
-            ps.setString(5, payment.getPaymentStatus());
-            ps.executeUpdate();
-
-            try (ResultSet keys = ps.getGeneratedKeys()) {
-                if (keys.next()) {
-                    int id = keys.getInt(1);
-                    payment.setPaymentId(id);
-                    return id;
-                }
-                throw new SQLException("Insert succeeded but no payment_id was returned.");
-            }
-        }
+        List<String[]> rows = CsvStorage.readAllRows(FILE, HEADERS);
+        int id = CsvStorage.nextIntId(rows, 0);
+        payment.setPaymentId(id);
+        rows.add(new String[]{
+            String.valueOf(id),
+            String.valueOf(payment.getRentalId()),
+            String.valueOf(payment.getAmountCentavos()),
+            CsvStorage.str(payment.getPaymentMethod()),
+            CsvStorage.str(payment.getPaymentDate()),
+            CsvStorage.str(payment.getPaymentStatus())
+        });
+        CsvStorage.writeAllRows(FILE, HEADERS, rows);
+        return id;
     }
 
     public int createPayment(RentalPayment payment) throws SQLException {
-        try (Connection conn = DatabaseConnection.getConnection()) {
-            return createPayment(conn, payment);
-        }
+        return createPayment(null, payment);
     }
 
     public boolean markPaymentAsPaid(int paymentId) throws SQLException {
-        String sql = "UPDATE rental_payments SET payment_status = 'PAID', payment_date = ? WHERE payment_id = ?";
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setTimestamp(1, Timestamp.valueOf(LocalDateTime.now()));
-            ps.setInt(2, paymentId);
-            return ps.executeUpdate() > 0;
+        List<String[]> rows = CsvStorage.readAllRows(FILE, HEADERS);
+        boolean found = false;
+        for (String[] r : rows) {
+            if (Integer.parseInt(r[0]) == paymentId) {
+                r[5] = "PAID";
+                r[4] = LocalDateTime.now().toString();
+                found = true;
+                break;
+            }
         }
+        if (found) {
+            CsvStorage.writeAllRows(FILE, HEADERS, rows);
+        }
+        return found;
     }
 
     public List<RentalPayment> getPaymentsByRentalId(int rentalId) throws SQLException {
-        String sql = "SELECT * FROM rental_payments WHERE rental_id = ? ORDER BY payment_id DESC";
         List<RentalPayment> list = new ArrayList<>();
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, rentalId);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    list.add(mapRow(rs));
-                }
+        for (String[] r : CsvStorage.readAllRows(FILE, HEADERS)) {
+            if (Integer.parseInt(r[1]) == rentalId) {
+                list.add(mapRow(r));
             }
         }
+        Collections.reverse(list);
         return list;
     }
 
     public RentalPayment getPaymentById(int paymentId) throws SQLException {
-        String sql = "SELECT * FROM rental_payments WHERE payment_id = ?";
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, paymentId);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    return mapRow(rs);
-                }
+        for (String[] r : CsvStorage.readAllRows(FILE, HEADERS)) {
+            if (Integer.parseInt(r[0]) == paymentId) {
+                return mapRow(r);
             }
         }
         return null;
     }
 
-    private RentalPayment mapRow(ResultSet rs) throws SQLException {
-        Timestamp payTs = rs.getTimestamp("payment_date");
+    private RentalPayment mapRow(String[] r) {
         return new RentalPayment(
-                rs.getInt("payment_id"),
-                rs.getInt("rental_id"),
-                rs.getInt("amount_centavos"),
-                rs.getString("payment_method"),
-                payTs != null ? payTs.toLocalDateTime() : null,
-                rs.getString("payment_status")
+            Integer.parseInt(r[0]),
+            Integer.parseInt(r[1]),
+            Integer.parseInt(r[2]),
+            r[3],
+            CsvStorage.parseNullableDateTime(r[4]),
+            r[5]
         );
     }
 }

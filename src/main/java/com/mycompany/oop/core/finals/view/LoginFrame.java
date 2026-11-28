@@ -185,7 +185,7 @@ public class LoginFrame extends JFrame {
     }
 
     /**
-     * Ensures starter accounts exist for all three roles if not already in the DB.
+     * Ensures 4 admin starter accounts exist and disables any legacy non-admin staff account.
      */
     private void ensureDefaultAccounts() {
         new Thread(() -> {
@@ -193,7 +193,12 @@ public class LoginFrame extends JFrame {
                 UserDAO userDAO = new UserDAO();
                 seedIfMissing(userDAO, "admin", "Chairperson Admin", "admin1234", UserRole.CHAIRPERSON);
                 seedIfMissing(userDAO, "manager", "Business Manager", "manager1234", UserRole.BUSINESS_MANAGER);
-                seedIfMissing(userDAO, "staff", "Committee Staff", "staff1234", UserRole.COMMITTEE_STAFF);
+                seedIfMissing(userDAO, "admin2", "Admin 2", "admin1234", UserRole.CHAIRPERSON);
+                seedIfMissing(userDAO, "admin3", "Admin 3", "admin1234", UserRole.BUSINESS_MANAGER);
+                User legacyStaff = userDAO.findByUsername("staff");
+                if (legacyStaff != null && legacyStaff.isActive()) {
+                    userDAO.setUserActive(legacyStaff.getUserId(), false);
+                }
             } catch (Exception ignored) {
                 // If offline or DB unreachable, login will display the connection error.
             }

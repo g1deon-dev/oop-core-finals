@@ -1,135 +1,88 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package com.mycompany.oop.core.finals.dao;
 
-/**
- *
- * @author g1deon-dev
- */
 import com.mycompany.oop.core.finals.model.User;
 import com.mycompany.oop.core.finals.model.UserRole;
-import com.mycompany.oop.core.finals.util.DatabaseConnection;
+import com.mycompany.oop.core.finals.util.CsvStorage;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 public class UserDAO {
 
-    // Create a new user account
+    private static final String FILE = "users.csv";
+    private static final String[] HEADERS = {
+        "user_id", "username", "full_name", "password_hash", "password_salt", "role", "is_active"
+    };
+
     public void createUser(
             String username,
             String fullName,
             String passwordHash,
             String passwordSalt,
             UserRole role) throws SQLException {
-
-        String sql = """
-            INSERT INTO users
-            (username, full_name, password_hash, password_salt, role)
-            VALUES (?, ?, ?, ?, ?)
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setString(1, username);
-            stmt.setString(2, fullName);
-            stmt.setString(3, passwordHash);
-            stmt.setString(4, passwordSalt);
-            stmt.setString(5, role.name());
-
-            stmt.executeUpdate();
-        }
+        List<String[]> rows = CsvStorage.readAllRows(FILE, HEADERS);
+        int id = CsvStorage.nextIntId(rows, 0);
+        rows.add(new String[]{
+            String.valueOf(id),
+            username,
+            fullName,
+            passwordHash,
+            passwordSalt,
+            role.name(),
+            "true"
+        });
+        CsvStorage.writeAllRows(FILE, HEADERS, rows);
     }
 
-    // Find a user using their username
     public User findByUsername(String username) throws SQLException {
-
-        String sql = """
-            SELECT * FROM users
-            WHERE username = ?
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setString(1, username);
-
-            try (ResultSet rs = stmt.executeQuery()) {
-
-                if (rs.next()) {
-                    return new User(
-                        rs.getInt("user_id"),
-                        rs.getString("username"),
-                        rs.getString("full_name"),
-                        UserRole.valueOf(rs.getString("role")),
-                        rs.getBoolean("is_active"),
-                        rs.getString("password_hash"),
-                        rs.getString("password_salt")
-                    );
-                }
+        List<String[]> rows = CsvStorage.readAllRows(FILE, HEADERS);
+        for (String[] r : rows) {
+            if (r[1].equals(username)) {
+                return new User(
+                    Integer.parseInt(r[0]),
+                    r[1],
+                    r[2],
+                    UserRole.valueOf(r[5]),
+                    Boolean.parseBoolean(r[6]),
+                    r[3],
+                    r[4]
+                );
             }
         }
-
         return null;
     }
 
-    // Retrieve all registered users
     public List<User> getAllUsers() throws SQLException {
-
+        List<String[]> rows = CsvStorage.readAllRows(FILE, HEADERS);
         List<User> users = new ArrayList<>();
-
-        String sql = """
-            SELECT user_id, username, full_name, role, is_active
-            FROM users
-            ORDER BY user_id
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-
-            while (rs.next()) {
-                users.add(new User(
-                    rs.getInt("user_id"),
-                    rs.getString("username"),
-                    rs.getString("full_name"),
-                    UserRole.valueOf(rs.getString("role")),
-                    rs.getBoolean("is_active")
-                ));
-            }
+        for (String[] r : rows) {
+            users.add(new User(
+                Integer.parseInt(r[0]),
+                r[1],
+                r[2],
+                UserRole.valueOf(r[5]),
+                Boolean.parseBoolean(r[6])
+            ));
         }
-
+        users.sort(Comparator.comparingInt(User::getUserId));
         return users;
     }
 
-    // Activate or deactivate an account
-    public void setUserActive(int userId, boolean active)
-            throws SQLException {
-
-        String sql = """
-            UPDATE users
-            SET is_active = ?
-            WHERE user_id = ?
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setBoolean(1, active);
-            stmt.setInt(2, userId);
-
-            int rowsUpdated = stmt.executeUpdate();
-
-            if (rowsUpdated == 0) {
-                throw new SQLException("User not found.");
+    public void setUserActive(int userId, boolean active) throws SQLException {
+        List<String[]> rows = CsvStorage.readAllRows(FILE, HEADERS);
+        boolean found = false;
+        for (String[] r : rows) {
+            if (Integer.parseInt(r[0]) == userId) {
+                r[6] = String.valueOf(active);
+                found = true;
+                break;
             }
         }
+        if (!found) {
+            throw new SQLException("User not found.");
+        }
+        CsvStorage.writeAllRows(FILE, HEADERS, rows);
     }
 }

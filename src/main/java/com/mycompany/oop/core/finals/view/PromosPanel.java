@@ -4,6 +4,28 @@
  */
 package com.mycompany.oop.core.finals.view;
 
+import com.mycompany.oop.core.finals.model.Bundle;
+import com.mycompany.oop.core.finals.model.PreOrder;
+import com.mycompany.oop.core.finals.model.Product;
+import com.mycompany.oop.core.finals.model.UserRole;
+import com.mycompany.oop.core.finals.security.AuthorizationService;
+import com.mycompany.oop.core.finals.security.UserSession;
+import com.mycompany.oop.core.finals.service.BundleService;
+import com.mycompany.oop.core.finals.service.AuthService;
+import com.mycompany.oop.core.finals.service.PreOrderService;
+import com.mycompany.oop.core.finals.service.ProductService;
+
+import javax.swing.JComboBox;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPasswordField;
+import javax.swing.JTextField;
+import java.awt.GridLayout;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  *
  * @author Admin
@@ -12,11 +34,388 @@ public class PromosPanel extends javax.swing.JFrame {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(PromosPanel.class.getName());
 
+    private UserSession session;
+    private AuthorizationService authService;
+    private BundleService bundleService;
+    private PreOrderService preOrderService;
+    private ProductService productService;
+    private List<Bundle> loadedBundles = new ArrayList<>();
+
     /**
      * Creates new form PromosPanel
      */
     public PromosPanel() {
+        this(null);
+    }
+
+    public PromosPanel(UserSession session) {
         initComponents();
+        initBackend(session);
+    }
+
+    private void initBackend(UserSession session) {
+        this.session = session;
+        polishLayout();
+        setupListeners();
+
+        if (session == null || !session.isLoggedIn()) {
+            return;
+        }
+
+        this.authService = new AuthorizationService(session);
+        this.bundleService = new BundleService(authService);
+        this.preOrderService = new PreOrderService(authService, session);
+        this.productService = new ProductService(authService);
+        jLabel1.setText(session.getCurrentUser().getRole().name());
+        jLabel2.setText(session.getCurrentUser().getFullName());
+
+        loadPromosData();
+    }
+
+    private void setupListeners() {
+        btnMerchInventory.addActionListener(e -> {
+            new MerchInventoryPanel(session).setVisible(true);
+            this.dispose();
+        });
+        btnDashboard.addActionListener(e -> javax.swing.JOptionPane.showMessageDialog(
+            this, "Dashboard is not yet implemented.", "Dashboard", javax.swing.JOptionPane.INFORMATION_MESSAGE));
+        btnRentalService.addActionListener(e -> javax.swing.JOptionPane.showMessageDialog(
+            this, "Rental Service is managed by the Rental team (coming soon).", "Rental Service", javax.swing.JOptionPane.INFORMATION_MESSAGE));
+        jButton5.addActionListener(e -> {  // Log Out
+            int confirm = javax.swing.JOptionPane.showConfirmDialog(
+                this, "Are you sure you want to log out?", "Log Out", javax.swing.JOptionPane.YES_NO_OPTION);
+            if (confirm == javax.swing.JOptionPane.YES_OPTION) {
+                if (session != null) session.endSession();
+                new LoginFrame().setVisible(true);
+                this.dispose();
+            }
+        });
+        jButton6.addActionListener(e -> showAccountSettings());
+        btnBundle1.addActionListener(e -> showBundleDetails(0));
+        btnBundle3.addActionListener(e -> showBundleDetails(2));
+    }
+
+    /**
+     * Rebuilds the sidebar so PROMOS is left-aligned (highlighted) rather than right-shifted,
+     * and makes the Log Out button clearly visible.
+     */
+    private void polishLayout() {
+        // ── Sidebar button styles ──────────────────────────────────────────────
+        javax.swing.border.Border navPadding = javax.swing.BorderFactory.createEmptyBorder(0, 12, 0, 12);
+
+        btnDashboard.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        btnDashboard.setBorder(navPadding);
+        btnDashboard.setMaximumSize(null);
+        btnDashboard.setMinimumSize(null);
+        btnDashboard.setPreferredSize(null);
+
+        btnMerchInventory.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        btnMerchInventory.setBorder(navPadding);
+        btnMerchInventory.setMaximumSize(null);
+        btnMerchInventory.setMinimumSize(null);
+        btnMerchInventory.setPreferredSize(null);
+
+        // PROMOS = active: left accent bar + navy bg, stays left-aligned
+        btnPromos.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        btnPromos.setBorder(javax.swing.BorderFactory.createCompoundBorder(
+            javax.swing.BorderFactory.createMatteBorder(0, 3, 0, 0, new java.awt.Color(192, 210, 224)),
+            javax.swing.BorderFactory.createEmptyBorder(0, 9, 0, 12)
+        ));
+        btnPromos.setMaximumSize(null);
+        btnPromos.setMinimumSize(null);
+        btnPromos.setPreferredSize(null);
+        btnPromos.setOpaque(true);  // needed for bg color to show
+
+        btnRentalService.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        btnRentalService.setBorder(navPadding);
+        btnRentalService.setMaximumSize(null);
+        btnRentalService.setMinimumSize(null);
+        btnRentalService.setPreferredSize(null);
+
+        // Settings
+        jButton6.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        jButton6.setBorder(navPadding);
+        jButton6.setMaximumSize(null);
+        jButton6.setMinimumSize(null);
+        jButton6.setPreferredSize(null);
+
+        // Log Out — make it visible: larger font, cyan accent color, border
+        jButton5.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        jButton5.setBorder(navPadding);
+        jButton5.setMaximumSize(null);
+        jButton5.setMinimumSize(null);
+        jButton5.setPreferredSize(null);
+        jButton5.setFont(new java.awt.Font("Segoe UI Historic", java.awt.Font.PLAIN, 12));
+        jButton5.setForeground(new java.awt.Color(192, 210, 224));
+
+        // ── Rebuild sidebar layout (all buttons left-aligned, uniform) ─────────
+        javax.swing.GroupLayout sidebarLayout = new javax.swing.GroupLayout(jPanel2);
+        jPanel2.removeAll();
+        jPanel2.setLayout(sidebarLayout);
+
+        // Find the logo label (jLabel component that holds the logo in MerchInventory uses jLabel1,
+        // but PromosPanel sidebar has no logo — we keep it empty above nav items)
+        sidebarLayout.setHorizontalGroup(
+            sidebarLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(sidebarLayout.createSequentialGroup()
+                .addGap(16, 16, 16)
+                .addGroup(sidebarLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addComponent(btnDashboard, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(btnMerchInventory, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(btnPromos, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(btnRentalService, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(jButton6, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(jButton5, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                .addGap(16, 16, 16))
+        );
+        sidebarLayout.setVerticalGroup(
+            sidebarLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(sidebarLayout.createSequentialGroup()
+                .addGap(158, 158, 158)   // same top gap as MerchInventory (logo height + padding)
+                .addComponent(btnDashboard, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(btnMerchInventory, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(btnPromos, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(btnRentalService, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addComponent(jButton6, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jButton5, javax.swing.GroupLayout.PREFERRED_SIZE, 32, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(32, 32, 32))
+        );
+        rebuildSidebar();
+    }
+
+    private void rebuildSidebar() {
+        jPanel2.removeAll();
+        jPanel2.setLayout(new java.awt.BorderLayout());
+
+        JPanel navigation = new JPanel();
+        navigation.setOpaque(false);
+        navigation.setLayout(new javax.swing.BoxLayout(navigation, javax.swing.BoxLayout.Y_AXIS));
+        navigation.setBorder(javax.swing.BorderFactory.createEmptyBorder(158, 14, 0, 14));
+        addSidebarButton(navigation, btnDashboard);
+        addSidebarButton(navigation, btnMerchInventory);
+        addSidebarButton(navigation, btnPromos);
+        addSidebarButton(navigation, btnRentalService);
+        jPanel2.add(navigation, java.awt.BorderLayout.NORTH);
+
+        JPanel accountActions = new JPanel();
+        accountActions.setOpaque(false);
+        accountActions.setLayout(new javax.swing.BoxLayout(accountActions, javax.swing.BoxLayout.Y_AXIS));
+        accountActions.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 14, 28, 14));
+        addSidebarButton(accountActions, jButton6);
+        addSidebarButton(accountActions, jButton5);
+        jPanel2.add(accountActions, java.awt.BorderLayout.SOUTH);
+    }
+
+    private void addSidebarButton(JPanel container, javax.swing.JButton button) {
+        button.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        button.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, 36));
+        button.setPreferredSize(new java.awt.Dimension(210, 36));
+        container.add(button);
+        container.add(javax.swing.Box.createVerticalStrut(6));
+    }
+
+    private void showAccountSettings() {
+        if (session == null || !session.isLoggedIn()) {
+            JOptionPane.showMessageDialog(this, "No active user session.", "Settings", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        UserRole role = session.getCurrentUser().getRole();
+        boolean isAdmin = role == UserRole.CHAIRPERSON || role == UserRole.BUSINESS_MANAGER;
+        String info = "User: " + session.getCurrentUser().getFullName()
+            + "\nUsername: " + session.getCurrentUser().getUsername()
+            + "\nRole: " + role.name()
+            + "\nAccess Level: " + (isAdmin ? "Admin (Full Inventory & Approval Access)" : "Staff (View, Search, Sales, Request)");
+
+        if (role == UserRole.CHAIRPERSON) {
+            Object[] options = {"Create New Account", "Close"};
+            int choice = JOptionPane.showOptionDialog(this, info, "Account & System Info",
+                JOptionPane.YES_NO_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[1]);
+            if (choice == 0) {
+                createUserAccount();
+            }
+        } else {
+            JOptionPane.showMessageDialog(this, info, "Account & System Info", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+    private void createUserAccount() {
+        JTextField usernameField = new JTextField();
+        JTextField fullNameField = new JTextField();
+        JPasswordField passwordField = new JPasswordField();
+        JComboBox<UserRole> roleBox = new JComboBox<>(UserRole.values());
+        JPanel form = new JPanel(new GridLayout(0, 2, 8, 8));
+        form.add(new JLabel("Username:"));
+        form.add(usernameField);
+        form.add(new JLabel("Full Name:"));
+        form.add(fullNameField);
+        form.add(new JLabel("Password (min 8 chars):"));
+        form.add(passwordField);
+        form.add(new JLabel("Role:"));
+        form.add(roleBox);
+
+        int result = JOptionPane.showConfirmDialog(this, form, "Create User Account",
+            JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result != JOptionPane.OK_OPTION) {
+            return;
+        }
+        try {
+            new AuthService(session).createUser(usernameField.getText(), fullNameField.getText(),
+                new String(passwordField.getPassword()), (UserRole) roleBox.getSelectedItem());
+            JOptionPane.showMessageDialog(this, "Account created successfully!", "User Management", JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Settings", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void loadPromosData() {
+        if (session == null || !session.isLoggedIn()) {
+            return;
+        }
+        try {
+            loadedBundles = bundleService.getAllBundles();
+            javax.swing.JButton[] bundleButtons = { btnBundle1, btnBundle2, btnBundle3 };
+            for (int i = 0; i < bundleButtons.length; i++) {
+                if (i < loadedBundles.size()) {
+                    Bundle b = loadedBundles.get(i);
+                    bundleButtons[i].setText(String.format("%s (₱%,.2f)", b.getBundleName(), b.getPriceCentavos() / 100.0));
+                    bundleButtons[i].setEnabled(true);
+                } else {
+                    bundleButtons[i].setText("Empty Slot");
+                    bundleButtons[i].setEnabled(false);
+                }
+            }
+
+            List<PreOrder> orders = preOrderService.getAllOrders();
+            JLabel[] idLabels = { lbOrderI01, lbOrderI02, lbOrderI03 };
+            JLabel[] nameLabels = { lblCustomerName1, lblCustomerName2, lblCustomerName3 };
+            JLabel[] bundleLabels = { lblBundleNum1, lblBundleNum2, lblBundleNum3 };
+            JLabel[] qtyLabels = { lblQuantity1, lblQuantity2, lblQuantity3 };
+            JLabel[] totalLabels = { lblTotal1, lblTotal2, lblTotal3 };
+            JLabel[] statusLabels = { lblStatus1, lblStatus2, lblStatus3 };
+
+            for (int i = 0; i < 3; i++) {
+                if (i < orders.size()) {
+                    PreOrder o = orders.get(i);
+                    idLabels[i].setText("PO-" + o.getOrderId());
+                    nameLabels[i].setText(o.getCustomerName());
+                    bundleLabels[i].setText(o.getBundleId() != null ? "Bundle #" + o.getBundleId() : "Prod #" + o.getProductId());
+                    qtyLabels[i].setText(String.valueOf(o.getQuantity()));
+                    totalLabels[i].setText(o.getFormattedTotal());
+                    statusLabels[i].setText(o.getStatus().name());
+                } else {
+                    idLabels[i].setText("-");
+                    nameLabels[i].setText("-");
+                    bundleLabels[i].setText("-");
+                    qtyLabels[i].setText("-");
+                    totalLabels[i].setText("-");
+                    statusLabels[i].setText("-");
+                }
+            }
+
+            List<Product> products = productService.getAllProducts();
+            JLabel[] codeLabels = { lblProductCode1, lblProductCode2, lblProductCode3, lblProductCode4 };
+            JLabel[] descLabels = { lblProductDescription1, lblProductDescription2, lblProductDescription3, lblProductDescription4 };
+            JLabel[] stockLabels = { lblProductStatus2, lblProductStatus4, lblProductStatus6, lblProductStatus8 };
+            JLabel[] priceLabels = { lblProductStatus3, lblProductStatus5, lblProductStatus7, lblProductStatus9 };
+
+            for (int i = 0; i < 4; i++) {
+                if (i < products.size()) {
+                    Product p = products.get(i);
+                    codeLabels[i].setText("#" + p.getProductId());
+                    descLabels[i].setText(p.getProductName());
+                    stockLabels[i].setText("Qty: " + p.getQuantity());
+                    priceLabels[i].setText(String.format("₱%,.2f", p.getPriceCentavos() / 100.0));
+                } else {
+                    codeLabels[i].setText("-");
+                    descLabels[i].setText("-");
+                    stockLabels[i].setText("-");
+                    priceLabels[i].setText("-");
+                }
+            }
+        } catch (SecurityException | SQLException ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Promos", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void showBundleDetails(int index) {
+        if (index < 0 || index >= loadedBundles.size()) {
+            return;
+        }
+        Bundle b = loadedBundles.get(index);
+        StringBuilder details = new StringBuilder();
+        details.append("Bundle: ").append(b.getBundleName()).append("\n");
+        details.append(String.format("Price: ₱%,.2f\n\nItems:\n", b.getPriceCentavos() / 100.0));
+        b.getItems().forEach(item ->
+            details.append(" - ").append(item.getProductName()).append(" x").append(item.getQuantity()).append("\n")
+        );
+        JOptionPane.showMessageDialog(this, details.toString(), "Bundle Details", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void handleCreatePreOrder() {
+        if (session == null || !session.isLoggedIn() || preOrderService == null) {
+            JOptionPane.showMessageDialog(this, "No active user session.", "Promos", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        if (loadedBundles.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No active bundles available to pre-order.", "Promos", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        JTextField customerField = new JTextField();
+        JTextField contactField = new JTextField();
+        JComboBox<String> bundleBox = new JComboBox<>();
+        for (Bundle b : loadedBundles) {
+            bundleBox.addItem(b.getBundleName() + String.format(" (₱%,.2f)", b.getPriceCentavos() / 100.0));
+        }
+        JTextField qtyField = new JTextField("1");
+        JTextField notesField = new JTextField();
+
+        JPanel form = new JPanel(new GridLayout(0, 2, 8, 8));
+        form.add(new JLabel("Customer Name:"));
+        form.add(customerField);
+        form.add(new JLabel("Contact Number:"));
+        form.add(contactField);
+        form.add(new JLabel("Bundle:"));
+        form.add(bundleBox);
+        form.add(new JLabel("Quantity:"));
+        form.add(qtyField);
+        form.add(new JLabel("Notes:"));
+        form.add(notesField);
+
+        int result = JOptionPane.showConfirmDialog(
+            this, form, "New Pre-Order", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE
+        );
+        if (result != JOptionPane.OK_OPTION) {
+            return;
+        }
+
+        try {
+            Bundle selected = loadedBundles.get(bundleBox.getSelectedIndex());
+            int qty = Integer.parseInt(qtyField.getText().trim());
+            long totalCentavos = selected.getPriceCentavos() * qty;
+
+            int orderId = preOrderService.createPreOrder(
+                customerField.getText(),
+                contactField.getText(),
+                selected.getBundleId(),
+                null,
+                qty,
+                totalCentavos,
+                notesField.getText()
+            );
+            JOptionPane.showMessageDialog(this, "Pre-Order PO-" + orderId + " created!");
+            loadPromosData();
+        } catch (NumberFormatException nfe) {
+            JOptionPane.showMessageDialog(this, "Quantity must be a valid integer.", "Promos", JOptionPane.ERROR_MESSAGE);
+        } catch (SecurityException | IllegalArgumentException | SQLException ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Promos", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     /**
@@ -1023,25 +1422,25 @@ public class PromosPanel extends javax.swing.JFrame {
         jButton1.setFont(new java.awt.Font("Segoe UI Historic", 1, 24)); // NOI18N
         jButton1.setForeground(new java.awt.Color(33, 86, 124));
         jButton1.setText("ADD NEW ORDER");
-        jButton1.setActionCommand("ADD NEW ORDER");
         jButton1.setBorder(null);
         jButton1.setContentAreaFilled(false);
+        jButton1.addActionListener(this::jButton1ActionPerformed);
 
         javax.swing.GroupLayout jPanel16Layout = new javax.swing.GroupLayout(jPanel16);
         jPanel16.setLayout(jPanel16Layout);
         jPanel16Layout.setHorizontalGroup(
             jPanel16Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel16Layout.createSequentialGroup()
-                .addGap(43, 43, 43)
+                .addGap(31, 31, 31)
                 .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 487, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap(47, Short.MAX_VALUE))
+                .addContainerGap(59, Short.MAX_VALUE))
         );
         jPanel16Layout.setVerticalGroup(
             jPanel16Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(jPanel16Layout.createSequentialGroup()
-                .addGap(21, 21, 21)
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel16Layout.createSequentialGroup()
+                .addContainerGap(24, Short.MAX_VALUE)
                 .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 43, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap(22, Short.MAX_VALUE))
+                .addGap(19, 19, 19))
         );
 
         javax.swing.GroupLayout jPanel1Layout = new javax.swing.GroupLayout(jPanel1);
@@ -1061,8 +1460,10 @@ public class PromosPanel extends javax.swing.JFrame {
                                 .addComponent(jPanel7, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                                 .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                                    .addComponent(jPanel16, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                    .addComponent(jPanel6, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                                    .addComponent(jPanel6, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                    .addGroup(jPanel1Layout.createSequentialGroup()
+                                        .addGap(31, 31, 31)
+                                        .addComponent(jPanel16, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)))
                                 .addGap(8, 8, 8))
                             .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel1Layout.createSequentialGroup()
                                 .addComponent(jPanel4, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
@@ -1082,13 +1483,12 @@ public class PromosPanel extends javax.swing.JFrame {
                         .addGap(27, 27, 27))
                     .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel1Layout.createSequentialGroup()
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(jPanel5, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addGap(18, 18, 18)))
+                        .addComponent(jPanel5, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)))
                 .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addGroup(jPanel1Layout.createSequentialGroup()
-                        .addGap(11, 11, 11)
+                        .addGap(20, 20, 20)
                         .addComponent(jPanel16, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addGap(27, 27, 27)
+                        .addGap(18, 18, 18)
                         .addComponent(jPanel6, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addGap(0, 0, Short.MAX_VALUE))
                     .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel1Layout.createSequentialGroup()
@@ -1127,12 +1527,16 @@ public class PromosPanel extends javax.swing.JFrame {
     }//GEN-LAST:event_btnAddBundleActionPerformed
 
     private void btnBundle2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnBundle2ActionPerformed
-        // TODO add your handling code here:
+        showBundleDetails(1);
     }//GEN-LAST:event_btnBundle2ActionPerformed
 
     private void btnAddBundle1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnAddBundle1ActionPerformed
-        // TODO add your handling code here:
+        handleCreatePreOrder();
     }//GEN-LAST:event_btnAddBundle1ActionPerformed
+
+    private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton1ActionPerformed
+        // TODO add your handling code here:
+    }//GEN-LAST:event_jButton1ActionPerformed
 
     /**
      * @param args the command line arguments

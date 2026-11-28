@@ -1,9 +1,43 @@
 package com.mycompany.oop.core.finals.view;
 
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/GUIForms/JFrame.java to edit this template
- */
+import com.mycompany.oop.core.finals.model.Product;
+import com.mycompany.oop.core.finals.model.Sale;
+import com.mycompany.oop.core.finals.model.StockMovement;
+import com.mycompany.oop.core.finals.model.UserRole;
+import com.mycompany.oop.core.finals.security.AuthorizationService;
+import com.mycompany.oop.core.finals.security.UserSession;
+import com.mycompany.oop.core.finals.service.AuthService;
+import com.mycompany.oop.core.finals.service.InventoryService;
+import com.mycompany.oop.core.finals.service.ProductService;
+import com.mycompany.oop.core.finals.service.SalesService;
+
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPasswordField;
+import javax.swing.JScrollPane;
+import javax.swing.JTextField;
+import javax.swing.SwingConstants;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.GridLayout;
+import java.awt.Toolkit;
+import java.net.URL;
+import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 /**
  *
@@ -13,11 +47,381 @@ public class DashboardPanel extends javax.swing.JFrame {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(DashboardPanel.class.getName());
 
+    private UserSession session;
+    private AuthorizationService authService;
+    private ProductService productService;
+    private InventoryService inventoryService;
+    private SalesService salesService;
+
+    private final JButton btnPromosNav = new JButton("PROMOS");
+
     /**
      * Creates new form DashboardPanel
      */
     public DashboardPanel() {
+        this(null);
+    }
+
+    public DashboardPanel(UserSession session) {
         initComponents();
+        initBackend(session);
+    }
+
+    private void initBackend(UserSession session) {
+        this.session = session;
+        polishLayout();
+        setupListeners();
+
+        if (session == null || !session.isLoggedIn()) {
+            return;
+        }
+
+        this.authService = new AuthorizationService(session);
+        this.productService = new ProductService(authService);
+        this.inventoryService = new InventoryService(authService, session);
+        this.salesService = new SalesService(authService, session);
+
+        String fullName = session.getCurrentUser().getFullName();
+        jLabel2.setText("Welcome back, " + fullName + "!");
+        jLabel5.setText(fullName);
+        jLabel4.setText(session.getCurrentUser().getRole().name());
+
+        loadDashboardData();
+    }
+
+    private void polishLayout() {
+        setTitle("CORE — Dashboard");
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+
+        Color sidebarBg = new Color(30, 30, 30);
+        Color headerNavy = new Color(9, 30, 57);
+        Color activeNavBg = new Color(11, 52, 90);
+        Color accentIce = new Color(192, 210, 224);
+        Color textLight = new Color(245, 245, 245);
+        Color cardBg = new Color(227, 232, 238);
+        Color subTitleBlue = new Color(33, 86, 124);
+
+        // ── Sidebar (matched to MerchInventoryPanel & PromosPanel) ───────────
+        jPanel2.setBackground(sidebarBg);
+        jPanel2.setBorder(BorderFactory.createEtchedBorder(null, Color.lightGray));
+        jPanel2.removeAll();
+        jPanel2.setLayout(new BorderLayout());
+
+        JPanel navPanel = new JPanel();
+        navPanel.setOpaque(false);
+        navPanel.setLayout(new BoxLayout(navPanel, BoxLayout.Y_AXIS));
+        navPanel.setBorder(BorderFactory.createEmptyBorder(24, 16, 0, 16));
+
+        JLabel lblLogo = new JLabel();
+        lblLogo.setAlignmentX(Component.LEFT_ALIGNMENT);
+        lblLogo.setMaximumSize(new Dimension(Integer.MAX_VALUE, 86));
+        lblLogo.setPreferredSize(new Dimension(210, 86));
+        URL logoUrl = getClass().getResource("/com/mycompany/oop/core/finals/view/logo.png");
+        if (logoUrl != null) {
+            lblLogo.setIcon(new ImageIcon(logoUrl));
+            lblLogo.setHorizontalAlignment(SwingConstants.CENTER);
+        } else {
+            lblLogo.setText("CORE");
+            lblLogo.setFont(new Font("Agency FB", Font.BOLD, 36));
+            lblLogo.setForeground(accentIce);
+        }
+        navPanel.add(lblLogo);
+        navPanel.add(Box.createVerticalStrut(48));
+
+        // Active: DASHBOARD
+        jbtnDashBoard.setText("DASHBOARD");
+        styleSidebarButton(jbtnDashBoard, true, activeNavBg, accentIce, textLight);
+        navPanel.add(jbtnDashBoard);
+        navPanel.add(Box.createVerticalStrut(6));
+
+        // Inactive nav items
+        jButton3.setText("MERCH INVENTORY");
+        styleSidebarButton(jButton3, false, activeNavBg, accentIce, textLight);
+        navPanel.add(jButton3);
+        navPanel.add(Box.createVerticalStrut(6));
+
+        styleSidebarButton(btnPromosNav, false, activeNavBg, accentIce, textLight);
+        navPanel.add(btnPromosNav);
+        navPanel.add(Box.createVerticalStrut(6));
+
+        jButton7.setText("RENTAL SERVICE");
+        styleSidebarButton(jButton7, false, activeNavBg, accentIce, textLight);
+        navPanel.add(jButton7);
+
+        jPanel2.add(navPanel, BorderLayout.NORTH);
+
+        JPanel bottomPanel = new JPanel();
+        bottomPanel.setOpaque(false);
+        bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.Y_AXIS));
+        bottomPanel.setBorder(BorderFactory.createEmptyBorder(0, 16, 32, 16));
+
+        jButton6.setText("Log Out");
+        styleSidebarButton(jButton6, false, activeNavBg, accentIce, accentIce);
+        jButton6.setFont(new Font("Segoe UI Historic", Font.PLAIN, 12));
+        bottomPanel.add(jButton6);
+
+        jPanel2.add(bottomPanel, BorderLayout.SOUTH);
+
+        // ── Header (matched to MerchInventoryPanel) ──────────────────────────
+        jPanel3.setBackground(headerNavy);
+        jLabel2.setFont(new Font("Agency FB", Font.BOLD, 44));
+        jLabel2.setForeground(textLight);
+        jPanel3.add(jLabel2, new org.netbeans.lib.awtextra.AbsoluteConstraints(24, 22, 650, 52));
+
+        jLabel3.setFont(new Font("Segoe UI Historic", Font.PLAIN, 14));
+        jLabel3.setForeground(textLight);
+        jPanel3.add(jLabel3, new org.netbeans.lib.awtextra.AbsoluteConstraints(24, 82, 500, 24));
+
+        jLabel5.setFont(new Font("Segoe UI Historic", Font.BOLD, 12));
+        jLabel5.setForeground(textLight);
+        jLabel5.setHorizontalAlignment(SwingConstants.CENTER);
+        jPanel3.add(jLabel5, new org.netbeans.lib.awtextra.AbsoluteConstraints(860, 56, 150, 20));
+
+        jLabel4.setFont(new Font("Segoe UI Historic", Font.PLAIN, 12));
+        jLabel4.setForeground(accentIce);
+        jLabel4.setHorizontalAlignment(SwingConstants.CENTER);
+        jPanel3.add(jLabel4, new org.netbeans.lib.awtextra.AbsoluteConstraints(860, 76, 150, 20));
+
+        // ── Main Content & Cards (matched to MerchInventoryPanel) ────────────
+        Color cardMedium = new Color(191, 205, 221);
+        Color darkText = new Color(30, 30, 30);
+
+        jPanel1.setBackground(textLight);
+        jPanel6.setBackground(cardBg);
+        jPanel7.setBackground(cardBg);
+        jPanel8.setBackground(cardBg);
+
+        jPanel14.setBackground(cardMedium);
+        jPanel15.setBackground(textLight);
+        jPanel9.setBackground(textLight);
+        jPanel10.setBackground(textLight);
+        jPanel11.setBackground(textLight);
+        jPanel12.setBackground(textLight);
+        jPanel13.setBackground(textLight);
+
+        // Card section headers
+        jLabel14.setFont(new Font("Segoe UI Historic", Font.BOLD, 18));
+        jLabel14.setForeground(headerNavy);
+        jLabel9.setFont(new Font("Segoe UI Historic", Font.BOLD, 14));
+        jLabel9.setForeground(subTitleBlue);
+        jLabel8.setFont(new Font("Segoe UI Historic", Font.BOLD, 18));
+        jLabel8.setForeground(headerNavy);
+
+        JLabel[] dayHeaders = { jLabel7, jLabel11, jLabel12, jLabel13, jLabel54, jLabel55, jLabel56 };
+        for (JLabel dh : dayHeaders) {
+            dh.setFont(new Font("Segoe UI Historic", Font.BOLD, 13));
+            dh.setForeground(subTitleBlue);
+        }
+
+        // Calendar day numbers on light card
+        JLabel[] calDays = {
+            jLabel26, jLabel66, jLabel67, jLabel68, jLabel69, jLabel70, jLabel71,
+            jLabel72, jLabel73, jLabel74, jLabel75, jLabel76, jLabel77, jLabel78,
+            jLabel80, jLabel81, jLabel82, jLabel83, jLabel85, jLabel86, jLabel87,
+            jLabel88, jLabel90, jLabel91, jLabel92, jLabel93, jLabel95, jLabel96,
+            jLabel97, jLabel98
+        };
+        for (JLabel cd : calDays) {
+            cd.setForeground(subTitleBlue);
+        }
+
+        // Total Sales card typography (matched to pnlTotalStock)
+        jLabel27.setFont(new Font("Segoe UI Historic", Font.BOLD, 16));
+        jLabel27.setForeground(headerNavy);
+        jLabel21.setText("PHP");
+        jLabel21.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        jLabel21.setForeground(subTitleBlue);
+        jPanel14.add(jLabel21, new org.netbeans.lib.awtextra.AbsoluteConstraints(35, 85, 40, 30));
+        jLabel23.setFont(new Font("Segoe UI", Font.BOLD, 42));
+        jLabel23.setForeground(subTitleBlue);
+        jLabel24.setFont(new Font("Segoe UI Historic", Font.BOLD, 13));
+        jLabel24.setForeground(headerNavy);
+        jLabel22.setFont(new Font("Segoe UI Historic", Font.PLAIN, 13));
+        jLabel22.setForeground(headerNavy);
+        jLabel20.setFont(new Font("Segoe UI Historic", Font.PLAIN, 13));
+        jLabel20.setForeground(headerNavy);
+
+        // Stock Status card typography
+        jLabel28.setFont(new Font("Segoe UI Historic", Font.BOLD, 16));
+        jLabel28.setForeground(headerNavy);
+        JLabel[] stockLabels = { jLabel29, jLabel30, jLabel31, jLabel32, jLabel25 };
+        for (JLabel sl : stockLabels) {
+            sl.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+            sl.setForeground(darkText);
+        }
+
+        // Recent Activities labels
+        jPanel10.add(jLabel16, new org.netbeans.lib.awtextra.AbsoluteConstraints(14, 10, 435, 20));
+        jPanel11.add(jLabel17, new org.netbeans.lib.awtextra.AbsoluteConstraints(14, 10, 435, 20));
+        jPanel12.add(jLabel18, new org.netbeans.lib.awtextra.AbsoluteConstraints(14, 10, 435, 20));
+        jPanel13.add(jLabel15, new org.netbeans.lib.awtextra.AbsoluteConstraints(14, 10, 435, 20));
+        JLabel[] actLabels = { jLabel16, jLabel17, jLabel18, jLabel15 };
+        for (JLabel al : actLabels) {
+            al.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+            al.setForeground(subTitleBlue);
+        }
+
+        // Wrap jPanel1 in a JScrollPane so it fits smaller laptop screens
+        JScrollPane scroll = new JScrollPane(jPanel1);
+        scroll.setBorder(null);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        scroll.getHorizontalScrollBar().setUnitIncrement(16);
+
+        getContentPane().removeAll();
+        getContentPane().setLayout(new BorderLayout());
+        getContentPane().add(scroll, BorderLayout.CENTER);
+
+        Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
+        int width = Math.min(1280, screen.width - 40);
+        int height = Math.min(800, screen.height - 60);
+        setSize(width, height);
+        setLocationRelativeTo(null);
+    }
+
+    private void styleSidebarButton(JButton btn, boolean active, Color activeBg, Color accentIce, Color fg) {
+        btn.setFont(new Font("Segoe UI Historic", Font.BOLD, 14));
+        btn.setForeground(fg);
+        btn.setHorizontalAlignment(SwingConstants.LEFT);
+        btn.setVerticalAlignment(SwingConstants.CENTER);
+        btn.setFocusPainted(false);
+        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        btn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        btn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
+        btn.setPreferredSize(new Dimension(210, 36));
+        if (active) {
+            btn.setBackground(activeBg);
+            btn.setOpaque(true);
+            btn.setContentAreaFilled(true);
+            btn.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 3, 0, 0, accentIce),
+                BorderFactory.createEmptyBorder(0, 9, 0, 12)
+            ));
+        } else {
+            btn.setOpaque(false);
+            btn.setContentAreaFilled(false);
+            btn.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 12));
+        }
+    }
+
+    private void setupListeners() {
+        jbtnDashBoard.addActionListener(e -> loadDashboardData());
+        jButton3.addActionListener(e -> {
+            new MerchInventoryPanel(session).setVisible(true);
+            this.dispose();
+        });
+        btnPromosNav.addActionListener(e -> {
+            new PromosPanel(session).setVisible(true);
+            this.dispose();
+        });
+        jButton7.addActionListener(e -> JOptionPane.showMessageDialog(
+            this,
+            "Rental Service is managed by the Rental team (coming soon).",
+            "Rental Service",
+            JOptionPane.INFORMATION_MESSAGE
+        ));
+    }
+
+    private void loadDashboardData() {
+        if (session == null || !session.isLoggedIn()) {
+            return;
+        }
+        try {
+            // 1. Total Sales
+            List<Sale> sales = salesService.getAllSales();
+            long totalCentavos = 0;
+            for (Sale s : sales) {
+                totalCentavos += s.getTotalCentavos();
+            }
+            jLabel23.setText(String.format("%,.2f", totalCentavos / 100.0));
+            jLabel20.setText(LocalDate.now().format(DateTimeFormatter.ofPattern("MMMM yyyy")));
+            jLabel24.setText(sales.size() + " sales");
+            jLabel22.setText("CORE Inventory");
+
+            // 2. Stock Status (top 5 active products)
+            List<Product> products = productService.getAllProducts();
+            JLabel[] stockLabels = { jLabel29, jLabel30, jLabel31, jLabel32, jLabel25 };
+            for (int i = 0; i < stockLabels.length; i++) {
+                if (i < products.size()) {
+                    Product p = products.get(i);
+                    String status = p.getQuantity() <= 0 ? "OUT"
+                        : (p.getQuantity() <= p.getLowStockThreshold() ? "LOW" : "OK");
+                    stockLabels[i].setText(String.format("%-26s  %d left (%s)", p.getProductName(), p.getQuantity(), status));
+                } else {
+                    stockLabels[i].setText("—");
+                }
+            }
+
+            // 3. Recent Activities (latest 4 stock movements)
+            List<StockMovement> movements = inventoryService.getAllMovements();
+            JLabel[] activityLabels = { jLabel16, jLabel17, jLabel18, jLabel15 };
+            for (int i = 0; i < activityLabels.length; i++) {
+                if (i < movements.size()) {
+                    StockMovement m = movements.get(i);
+                    String sign = m.getChangeAmount() > 0 ? "+" : "";
+                    activityLabels[i].setText(String.format(
+                        "Product #%d  %s%d  (%s)",
+                        m.getProductId(), sign, m.getChangeAmount(), m.getReason()
+                    ));
+                } else {
+                    activityLabels[i].setText("No recent activity");
+                }
+            }
+        } catch (SecurityException | SQLException ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Dashboard", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void showAccountSettings() {
+        if (session == null || !session.isLoggedIn()) {
+            JOptionPane.showMessageDialog(this, "No active user session.", "Settings", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        UserRole role = session.getCurrentUser().getRole();
+        boolean isAdmin = role == UserRole.CHAIRPERSON || role == UserRole.BUSINESS_MANAGER;
+        String info = "User: " + session.getCurrentUser().getFullName()
+            + "\nUsername: " + session.getCurrentUser().getUsername()
+            + "\nRole: " + role.name()
+            + "\nAccess Level: " + (isAdmin ? "Admin (Full Inventory & Approval Access)" : "Staff (View, Search, Sales, Request)");
+
+        if (role == UserRole.CHAIRPERSON) {
+            Object[] options = {"Create New Account", "Close"};
+            int choice = JOptionPane.showOptionDialog(this, info, "Account & System Info",
+                JOptionPane.YES_NO_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[1]);
+            if (choice == 0) {
+                createUserAccount();
+            }
+        } else {
+            JOptionPane.showMessageDialog(this, info, "Account & System Info", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+    private void createUserAccount() {
+        JTextField usernameField = new JTextField();
+        JTextField fullNameField = new JTextField();
+        JPasswordField passwordField = new JPasswordField();
+        JComboBox<UserRole> roleBox = new JComboBox<>(UserRole.values());
+        JPanel form = new JPanel(new GridLayout(0, 2, 8, 8));
+        form.add(new JLabel("Username:"));
+        form.add(usernameField);
+        form.add(new JLabel("Full Name:"));
+        form.add(fullNameField);
+        form.add(new JLabel("Password (min 8 chars):"));
+        form.add(passwordField);
+        form.add(new JLabel("Role:"));
+        form.add(roleBox);
+
+        int result = JOptionPane.showConfirmDialog(this, form, "Create User Account",
+            JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result != JOptionPane.OK_OPTION) {
+            return;
+        }
+        try {
+            new AuthService(session).createUser(usernameField.getText(), fullNameField.getText(),
+                new String(passwordField.getPassword()), (UserRole) roleBox.getSelectedItem());
+            JOptionPane.showMessageDialog(this, "Account created successfully!", "User Management", JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Settings", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     /**
@@ -601,7 +1005,20 @@ public class DashboardPanel extends javax.swing.JFrame {
     }// </editor-fold>//GEN-END:initComponents
 
     private void jButton6ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton6ActionPerformed
-        // TODO add your handling code here:
+        int confirm = JOptionPane.showConfirmDialog(
+            this,
+            "Are you sure you want to log out?",
+            "Log Out",
+            JOptionPane.YES_NO_OPTION
+        );
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
+        }
+        if (session != null) {
+            session.endSession();
+        }
+        new LoginFrame().setVisible(true);
+        this.dispose();
     }//GEN-LAST:event_jButton6ActionPerformed
 
     /**

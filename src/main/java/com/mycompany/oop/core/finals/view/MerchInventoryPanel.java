@@ -43,6 +43,7 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
     private AuthorizationService authService;
     private ProductService productService;
     private InventoryService inventoryService;
+    private final javax.swing.JButton btnAuditLog = new javax.swing.JButton("Audit Log");
 
     /**
      * Creates new form MerchInventoryPanel
@@ -90,6 +91,7 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
         });
         btnAddProduct.addActionListener(e -> handleAddProduct());
         btnEdit.addActionListener(e -> handleEditProduct());
+        btnAuditLog.addActionListener(e -> handleViewAllAuditLogs());
         btnMerchInventory.addActionListener(e -> refreshData());
         btnRentalService.addActionListener(e -> JOptionPane.showMessageDialog(
             this,
@@ -104,7 +106,7 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
     private void setupTableContextMenu() {
         JPopupMenu menu = new JPopupMenu();
 
-        JMenuItem miRestockOrRequest = new JMenuItem("Restock / Request Stock Change");
+        JMenuItem miRestockOrRequest = new JMenuItem("Adjust Stock (+/-) / Request Change");
         miRestockOrRequest.addActionListener(e -> handleRestockOrRequest());
 
         JMenuItem miMovements = new JMenuItem("View Stock Movement History");
@@ -171,8 +173,6 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
             javax.swing.BorderFactory.createMatteBorder(0, 3, 0, 0, new java.awt.Color(192, 210, 224)),
             javax.swing.BorderFactory.createEmptyBorder(0, 9, 0, 12)
         ));
-        btnSettings.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
-        btnSettings.setBorder(navPadding);
         btnLogout.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
         btnLogout.setBorder(navPadding);
 
@@ -186,7 +186,6 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
                     .addComponent(btnMerchInventory, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                     .addComponent(btnPromos, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                     .addComponent(btnRentalService, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addComponent(btnSettings, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                     .addComponent(btnLogout, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
                 .addGap(16, 16, 16))
         );
@@ -204,8 +203,6 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(btnRentalService, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                .addComponent(btnSettings, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(btnLogout, javax.swing.GroupLayout.PREFERRED_SIZE, 32, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addGap(32, 32, 32))
         );
@@ -291,6 +288,59 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
         tblProducts.getColumnModel().getColumn(4).setPreferredWidth(140);  // Low Stock Threshold
         tblProducts.getColumnModel().getColumn(5).setPreferredWidth(110);  // Stock Status
 
+        // ── Product Management toolbar: add Audit Log button ─────────────────
+        btnAuditLog.setBackground(new java.awt.Color(191, 205, 221));
+        btnAuditLog.setFont(new java.awt.Font("Segoe UI Historic", java.awt.Font.BOLD, 12));
+        btnAuditLog.setForeground(new java.awt.Color(9, 30, 57));
+        btnAuditLog.setFocusPainted(false);
+        btnAuditLog.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+
+        javax.swing.GroupLayout toolbarLayout = new javax.swing.GroupLayout(jPanel2);
+        jPanel2.setLayout(toolbarLayout);
+        toolbarLayout.setHorizontalGroup(
+            toolbarLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(toolbarLayout.createSequentialGroup()
+                .addGap(19, 19, 19)
+                .addGroup(toolbarLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                    .addComponent(lblProductManagement, javax.swing.GroupLayout.PREFERRED_SIZE, 396, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addGroup(toolbarLayout.createSequentialGroup()
+                        .addComponent(btnAddProduct, javax.swing.GroupLayout.PREFERRED_SIZE, 120, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(btnEdit, javax.swing.GroupLayout.PREFERRED_SIZE, 63, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(btnDeactivate)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(btnRefresh)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(btnAuditLog))
+                    .addGroup(toolbarLayout.createSequentialGroup()
+                        .addComponent(txtSearch, javax.swing.GroupLayout.PREFERRED_SIZE, 831, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(btnSearch, javax.swing.GroupLayout.PREFERRED_SIZE, 113, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addComponent(jScrollPane1))
+                .addContainerGap(18, Short.MAX_VALUE))
+        );
+        toolbarLayout.setVerticalGroup(
+            toolbarLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(toolbarLayout.createSequentialGroup()
+                .addGap(19, 19, 19)
+                .addComponent(lblProductManagement, javax.swing.GroupLayout.PREFERRED_SIZE, 55, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addGroup(toolbarLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(txtSearch, javax.swing.GroupLayout.PREFERRED_SIZE, 32, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(btnSearch, javax.swing.GroupLayout.PREFERRED_SIZE, 32, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addGroup(toolbarLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(btnAddProduct)
+                    .addComponent(btnEdit)
+                    .addComponent(btnDeactivate)
+                    .addComponent(btnRefresh)
+                    .addComponent(btnAuditLog))
+                .addGap(18, 18, 18)
+                .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 320, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap(24, Short.MAX_VALUE))
+        );
+
         // ── Scroll wrapper for smaller screens ────────────────────────────────
         javax.swing.JScrollPane mainScroll = new javax.swing.JScrollPane(pnlMain);
         mainScroll.setBorder(null);
@@ -301,7 +351,10 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
         getContentPane().add(pnlSidebar, java.awt.BorderLayout.WEST);
         getContentPane().add(mainScroll, java.awt.BorderLayout.CENTER);
 
-        pack();
+        java.awt.Dimension screen = java.awt.Toolkit.getDefaultToolkit().getScreenSize();
+        int width = Math.min(1280, screen.width - 40);
+        int height = Math.min(800, screen.height - 60);
+        setSize(width, height);
         setLocationRelativeTo(null);
     }
 
@@ -367,7 +420,7 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
             int quantity = Integer.parseInt(qtyField.getText().trim());
             int threshold = Integer.parseInt(thresholdField.getText().trim());
 
-            productService.addProduct(new Product(0, nameField.getText(), priceCentavos, quantity, threshold, true));
+            inventoryService.addProductWithAudit(new Product(0, nameField.getText(), priceCentavos, quantity, threshold, true));
             refreshData();
             JOptionPane.showMessageDialog(this, "Product added successfully!", "Merch Inventory", JOptionPane.INFORMATION_MESSAGE);
         } catch (NumberFormatException nfe) {
@@ -396,7 +449,8 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
             JTextField nameField = new JTextField(existing.getProductName());
             JTextField priceField = new JTextField(String.format("%.2f", existing.getPriceCentavos() / 100.0));
             JTextField thresholdField = new JTextField(String.valueOf(existing.getLowStockThreshold()));
-            JTextField restockField = new JTextField("0");
+            JTextField adjustField = new JTextField("0");
+            JTextField reasonField = new JTextField();
 
             JPanel form = new JPanel(new GridLayout(0, 2, 8, 8));
             form.add(new JLabel("Product Name:"));
@@ -405,11 +459,14 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
             form.add(priceField);
             form.add(new JLabel("Low Stock Threshold:"));
             form.add(thresholdField);
-            form.add(new JLabel("Restock (+Qty, optional):"));
-            form.add(restockField);
+            form.add(new JLabel("Adjust Stock (+/- Qty, e.g. 5 or -3):"));
+            form.add(adjustField);
+            form.add(new JLabel("Adjustment Reason (optional):"));
+            form.add(reasonField);
 
             int result = JOptionPane.showConfirmDialog(
-                this, form, "Edit Product #" + productId, JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE
+                this, form, "Edit Product #" + productId + " (Current Qty: " + existing.getQuantity() + ")",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE
             );
             if (result != JOptionPane.OK_OPTION) {
                 return;
@@ -417,11 +474,7 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
 
             int priceCentavos = (int) Math.round(Double.parseDouble(priceField.getText().trim()) * 100);
             int threshold = Integer.parseInt(thresholdField.getText().trim());
-            int restockQty = Integer.parseInt(restockField.getText().trim());
-            if (restockQty < 0) {
-                showError("Restock quantity cannot be negative.");
-                return;
-            }
+            int adjustQty = Integer.parseInt(adjustField.getText().trim());
 
             productService.updateProduct(new Product(
                 existing.getProductId(),
@@ -431,13 +484,13 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
                 threshold,
                 existing.isActive()
             ));
-            if (restockQty > 0) {
-                inventoryService.restockProduct(productId, restockQty);
+            if (adjustQty != 0) {
+                inventoryService.adjustStock(productId, adjustQty, reasonField.getText());
             }
             refreshData();
             JOptionPane.showMessageDialog(this, "Product updated successfully!", "Merch Inventory", JOptionPane.INFORMATION_MESSAGE);
         } catch (NumberFormatException nfe) {
-            showError("Please enter valid numbers for price, threshold, and restock quantity.");
+            showError("Please enter valid numbers for price, threshold, and stock adjustment.");
         } catch (SecurityException | IllegalArgumentException | SQLException ex) {
             showError(ex.getMessage());
         }
@@ -458,14 +511,12 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
         JTextField qtyField = new JTextField("1");
         JTextField reasonField = new JTextField();
         JPanel form = new JPanel(new GridLayout(0, 2, 8, 8));
-        form.add(new JLabel(isAdmin ? "Quantity to Add:" : "Requested Quantity:"));
+        form.add(new JLabel(isAdmin ? "Adjust Qty (+ add / - subtract):" : "Requested Quantity:"));
         form.add(qtyField);
-        if (!isAdmin) {
-            form.add(new JLabel("Reason:"));
-            form.add(reasonField);
-        }
+        form.add(new JLabel(isAdmin ? "Reason (optional):" : "Reason:"));
+        form.add(reasonField);
 
-        String title = isAdmin ? "Restock Product #" + productId : "Request Stock Change #" + productId;
+        String title = isAdmin ? "Adjust Stock — Product #" + productId : "Request Stock Change #" + productId;
         int result = JOptionPane.showConfirmDialog(this, form, title, JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
         if (result != JOptionPane.OK_OPTION) {
             return;
@@ -474,9 +525,10 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
         try {
             int qty = Integer.parseInt(qtyField.getText().trim());
             if (isAdmin) {
-                inventoryService.restockProduct(productId, qty);
+                inventoryService.adjustStock(productId, qty, reasonField.getText());
                 refreshData();
-                JOptionPane.showMessageDialog(this, "Restocked +" + qty + " units.", "Restock", JOptionPane.INFORMATION_MESSAGE);
+                String verb = qty > 0 ? ("Added +" + qty) : ("Deducted " + qty);
+                JOptionPane.showMessageDialog(this, verb + " units.", "Stock Updated", JOptionPane.INFORMATION_MESSAGE);
             } else {
                 int reqId = inventoryService.submitStockChangeRequest(productId, qty, reasonField.getText());
                 JOptionPane.showMessageDialog(this, "Stock-change request #" + reqId + " submitted for approval.", "Request Submitted", JOptionPane.INFORMATION_MESSAGE);
@@ -529,6 +581,45 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
         }
     }
 
+    private void handleViewAllAuditLogs() {
+        if (!ensureConnected()) {
+            return;
+        }
+        try {
+            List<StockMovement> movements = inventoryService.getAllMovements();
+            if (movements.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "No audit movements recorded yet.", "Inventory Audit Log", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+            DefaultTableModel model = new DefaultTableModel(
+                new String[]{"Move ID", "Product ID", "Change", "Reason", "Ref ID", "User ID", "Timestamp"}, 0
+            ) {
+                @Override
+                public boolean isCellEditable(int row, int column) {
+                    return false;
+                }
+            };
+            for (StockMovement m : movements) {
+                model.addRow(new Object[]{
+                    m.getMovementId(),
+                    m.getProductId(),
+                    (m.getChangeAmount() > 0 ? "+" : "") + m.getChangeAmount(),
+                    m.getReason(),
+                    m.getReferenceId() == null ? "-" : m.getReferenceId(),
+                    m.getCreatedBy(),
+                    m.getCreatedAt() == null ? "-" : m.getCreatedAt().toString()
+                });
+            }
+            JTable table = new JTable(model);
+            table.setRowHeight(26);
+            JScrollPane scroll = new JScrollPane(table);
+            scroll.setPreferredSize(new Dimension(720, 340));
+            JOptionPane.showMessageDialog(this, scroll, "Inventory Audit Log (All Stock Movements)", JOptionPane.PLAIN_MESSAGE);
+        } catch (SecurityException | SQLException ex) {
+            showError(ex.getMessage());
+        }
+    }
+
     private void handleReactivateProducts() {
         if (!ensureConnected()) {
             return;
@@ -558,7 +649,7 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
             }
             String selStr = selected.toString();
             int id = Integer.parseInt(selStr.substring(1, selStr.indexOf(" ")));
-            productService.reactivateProduct(id);
+            inventoryService.reactivateProductWithAudit(id);
             refreshData();
             JOptionPane.showMessageDialog(this, "Product #" + id + " reactivated.", "Reactivate", JOptionPane.INFORMATION_MESSAGE);
         } catch (SecurityException | IllegalArgumentException | SQLException ex) {
@@ -1218,12 +1309,8 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
     }//GEN-LAST:event_btnPromosActionPerformed
 
     private void btnDashboardActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnDashboardActionPerformed
-        JOptionPane.showMessageDialog(
-            this,
-            "Dashboard screen is not yet implemented.",
-            "Dashboard",
-            JOptionPane.INFORMATION_MESSAGE
-        );
+        new DashboardPanel(session).setVisible(true);
+        this.dispose();
     }//GEN-LAST:event_btnDashboardActionPerformed
 
     private void btnDeactivateActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnDeactivateActionPerformed
@@ -1244,7 +1331,7 @@ public class MerchInventoryPanel extends javax.swing.JFrame {
             return;
         }
         try {
-            productService.deactivateProduct(productId);
+            inventoryService.deactivateProductWithAudit(productId);
             refreshData();
             JOptionPane.showMessageDialog(this, "Product #" + productId + " deactivated.", "Merch Inventory", JOptionPane.INFORMATION_MESSAGE);
         } catch (SecurityException | IllegalArgumentException | SQLException ex) {

@@ -164,8 +164,7 @@ public class LoginFrame extends JFrame {
 
         try {
             User user = authService.login(username, password);
-            MerchInventoryPanel mainFrame = new MerchInventoryPanel(session);
-            mainFrame.setLocationRelativeTo(null);
+            DashboardPanel mainFrame = new DashboardPanel(session);
             mainFrame.setVisible(true);
             this.dispose();
         } catch (IllegalArgumentException ex) {

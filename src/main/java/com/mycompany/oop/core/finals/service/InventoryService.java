@@ -61,25 +61,48 @@ public class InventoryService {
 
     // Direct restock by Admin, automatically logged in Stock Movements
     public void restockProduct(int productId, int quantityToAdd) throws SQLException {
+        if (quantityToAdd <= 0) {
+            throw new IllegalArgumentException("Quantity to add must be greater than zero.");
+        }
+        adjustStock(productId, quantityToAdd, "RESTOCK");
+    }
+
+    // Direct stock adjustment (+/-) by Admin, automatically logged in Stock Movements
+    public void adjustStock(int productId, int delta, String reason) throws SQLException {
         authorizationService.requireProductManagementAccess();
 
         if (productId <= 0) {
             throw new IllegalArgumentException("Invalid product ID.");
         }
-        if (quantityToAdd <= 0) {
-            throw new IllegalArgumentException("Quantity to add must be greater than zero.");
+        if (delta == 0) {
+            throw new IllegalArgumentException("Stock adjustment cannot be zero.");
         }
+
+        Product existing = productDAO.getProductById(productId);
+        if (existing == null || !existing.isActive()) {
+            throw new IllegalArgumentException("Product does not exist or is inactive.");
+        }
+        if (existing.getQuantity() + delta < 0) {
+            throw new IllegalArgumentException(
+                "Insufficient stock. Current quantity is " + existing.getQuantity() + "."
+            );
+        }
+
+        String defaultReason = delta > 0 ? "RESTOCK" : "STOCK_DEDUCTION";
+        String finalReason = (reason != null && !reason.isBlank())
+            ? defaultReason + ": " + reason.trim()
+            : defaultReason;
 
         int currentUserId = session.getCurrentUser().getUserId();
 
         try (Connection conn = DatabaseConnection.getConnection()) {
             conn.setAutoCommit(false);
             try {
-                productDAO.restockProduct(productId, quantityToAdd);
+                productDAO.adjustStock(conn, productId, delta);
                 movementDAO.recordMovement(conn, new StockMovement(
                     productId,
-                    quantityToAdd,
-                    "RESTOCK",
+                    delta,
+                    finalReason,
                     null,
                     currentUserId
                 ));
@@ -91,6 +114,83 @@ public class InventoryService {
                 conn.setAutoCommit(true);
             }
         }
+    }
+
+    // Add a product and record its creation in the Audit Log
+    public void addProductWithAudit(Product product) throws SQLException {
+        authorizationService.requireProductManagementAccess();
+
+        if (product == null) {
+            throw new IllegalArgumentException("Product cannot be null.");
+        }
+        if (product.getProductName() == null || product.getProductName().isBlank()) {
+            throw new IllegalArgumentException("Product name is required.");
+        }
+        if (product.getPriceCentavos() < 0) {
+            throw new IllegalArgumentException("Price cannot be negative.");
+        }
+        if (product.getQuantity() < 0) {
+            throw new IllegalArgumentException("Quantity cannot be negative.");
+        }
+        if (product.getLowStockThreshold() < 0) {
+            throw new IllegalArgumentException("Low-stock threshold cannot be negative.");
+        }
+
+        String name = product.getProductName().trim();
+        if (productDAO.productNameExists(name)) {
+            throw new IllegalArgumentException("A product with this name already exists.");
+        }
+
+        Product cleaned = new Product(0, name, product.getPriceCentavos(), product.getQuantity(), product.getLowStockThreshold(), true);
+        int newId = productDAO.addProductAndReturnId(cleaned);
+        if (newId > 0) {
+            int currentUserId = session.getCurrentUser().getUserId();
+            movementDAO.recordMovement(new StockMovement(
+                newId,
+                cleaned.getQuantity(),
+                "PRODUCT_ADDED: " + name,
+                null,
+                currentUserId
+            ));
+        }
+    }
+
+    // Deactivate (soft-delete) a product and record it in the Audit Log
+    public void deactivateProductWithAudit(int productId) throws SQLException {
+        authorizationService.requireProductManagementAccess();
+        if (productId <= 0) {
+            throw new IllegalArgumentException("Invalid product ID.");
+        }
+        Product existing = productDAO.getProductById(productId);
+        productDAO.deactivateProduct(productId);
+        int currentUserId = session.getCurrentUser().getUserId();
+        String label = existing != null ? existing.getProductName() : ("#" + productId);
+        movementDAO.recordMovement(new StockMovement(
+            productId,
+            0,
+            "PRODUCT_DELETED: " + label,
+            null,
+            currentUserId
+        ));
+    }
+
+    // Reactivate a product and record it in the Audit Log
+    public void reactivateProductWithAudit(int productId) throws SQLException {
+        authorizationService.requireProductManagementAccess();
+        if (productId <= 0) {
+            throw new IllegalArgumentException("Invalid product ID.");
+        }
+        Product existing = productDAO.getProductById(productId);
+        productDAO.reactivateProduct(productId);
+        int currentUserId = session.getCurrentUser().getUserId();
+        String label = existing != null ? existing.getProductName() : ("#" + productId);
+        movementDAO.recordMovement(new StockMovement(
+            productId,
+            0,
+            "PRODUCT_REACTIVATED: " + label,
+            null,
+            currentUserId
+        ));
     }
 
     // Approve a request (Admin only)
